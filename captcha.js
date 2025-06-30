@@ -1,5 +1,5 @@
 const express = require('express');
-const chromium = require('chrome-aws-lambda');
+const puppeteer = require('puppeteer'); // 👈 Changed from chrome-aws-lambda
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
@@ -18,10 +18,9 @@ app.use('/public', express.static(publicDir));
 app.get('/getCaptcha', async (req, res) => {
   try {
     console.log('🚀 Launching Puppeteer...');
-    const browser = await chromium.puppeteer.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath,
-      headless: chromium.headless,
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'] // 👈 Required for Render
     });
 
     const page = await browser.newPage();

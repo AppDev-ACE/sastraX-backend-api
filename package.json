@@ -3,17 +3,11 @@
   "version": "1.0.0",
   "main": "captcha.js",
   "scripts": {
-    "start": "node captcha.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node captcha.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "puppeteer-core": "^10.2.0",
-    "chrome-aws-lambda": "^10.1.0"
+    "puppeteer": "^21.3.8" 
   }
 }
