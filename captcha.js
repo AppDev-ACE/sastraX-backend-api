@@ -15,7 +15,6 @@ if (!fs.existsSync(publicDir)) {
 
 app.use('/public', express.static(publicDir));
 
-// GET /getCaptcha
 app.get('/getCaptcha', async (req, res) => {
   try {
     console.log('🚀 Launching Puppeteer...');
@@ -36,7 +35,7 @@ app.get('/getCaptcha', async (req, res) => {
     await page.waitForSelector(captchaSelector, { timeout: 10000 });
 
     console.log('⏳ Waiting 3 more seconds for CAPTCHA to fully render...');
-    await new Promise(resolve => setTimeout(resolve, 3000)); // 3 sec wait after selector
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     const captchaElement = await page.$(captchaSelector);
     if (!captchaElement) {
@@ -52,7 +51,7 @@ app.get('/getCaptcha', async (req, res) => {
     console.log('✅ CAPTCHA screenshot saved.');
 
     res.json({
-      captchaUrl: `http://localhost:3000/public/captcha.png?ts=${Date.now()}`
+      captchaUrl: `https://${req.headers.host}/public/captcha.png?ts=${Date.now()}`
     });
 
   } catch (error) {
@@ -61,8 +60,8 @@ app.get('/getCaptcha', async (req, res) => {
   }
 });
 
-// Start server
-const PORT = 3000;
+// ✅ Use dynamic port for Render
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`);
 });
