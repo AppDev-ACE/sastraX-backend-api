@@ -1,5 +1,5 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const chromium = require('chrome-aws-lambda');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
@@ -15,28 +15,25 @@ if (!fs.existsSync(publicDir)) {
 
 app.use('/public', express.static(publicDir));
 
-// GET /getCaptcha
 app.get('/getCaptcha', async (req, res) => {
   try {
     console.log('🚀 Launching Puppeteer...');
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    const browser = await chromium.puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath,
+      headless: chromium.headless,
     });
 
     const page = await browser.newPage();
-
     console.log('🌐 Navigating to login page...');
     await page.goto('https://webstream.sastra.edu/sastrapwi/', {
-      waitUntil: 'networkidle2'
+      waitUntil: 'networkidle2',
     });
 
     const captchaSelector = '#imgCaptcha';
     console.log('⏳ Waiting for CAPTCHA image selector...');
     await page.waitForSelector(captchaSelector, { timeout: 10000 });
-
-    console.log('⏳ Waiting 3 more seconds for CAPTCHA to fully render...');
-    await new Promise(resolve => setTimeout(resolve, 3000)); // 3 sec wait after selector
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     const captchaElement = await page.$(captchaSelector);
     if (!captchaElement) {
@@ -52,7 +49,7 @@ app.get('/getCaptcha', async (req, res) => {
     console.log('✅ CAPTCHA screenshot saved.');
 
     res.json({
-      captchaUrl: `https://sastrax-backend-api.onrender.com/public/captcha.png?ts=${Date.now()}`
+      captchaUrl: `https://${req.headers.host}/public/captcha.png?ts=${Date.now()}`
     });
 
   } catch (error) {
