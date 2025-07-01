@@ -8,6 +8,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+
 // To provide captcha to the UI
 app.get('/captcha', async (req, res) => {
     const browser = await puppeteer.launch({
@@ -44,7 +45,7 @@ app.post('/login', async (req, res) => {
     await page.type("#answer", captcha);
 
     await Promise.all([
-      page.click('input[type="submit"]'),
+      page.click('input[type="button"]'),
       page.waitForNavigation({ waitUntil: 'networkidle0' })
     ]);
 
