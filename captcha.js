@@ -8,37 +8,31 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+let browser,page;
 
 // To provide captcha to the UI
 app.get('/captcha', async (req, res) => {
-    const browser = await puppeteer.launch({
+
+    browser = await puppeteer.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox'] //to host publicly
     });
 
-    const page = await browser.newPage();
+    page = await browser.newPage();
     await page.goto("https://webstream.sastra.edu/sastrapwi/");
     await new Promise(resolve => setTimeout(resolve, 1500));
     await page.waitForSelector('#imgCaptcha', { timeout: 5000 });
+
     const captchaPath = path.join(__dirname, 'captcha.png');
     const captchaElement = await page.$('#imgCaptcha');
     await captchaElement.screenshot({ path: captchaPath });
 
-    await browser.close();
     res.sendFile(captchaPath);
 });
 
 // To get the reg no, password and captcha from the user and login
 app.post('/login', async (req, res) => {
   const { regno, pwd, captcha } = req.body;
-
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-
-    const page = await browser.newPage();
-    await page.goto("https://webstream.sastra.edu/sastrapwi/");
 
     await page.type("#txtRegNumber", regno);
     await page.type("#txtPwd", pwd);
