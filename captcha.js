@@ -50,10 +50,47 @@ app.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: msg });
     }
 
-    await browser.close();
+    //await browser.close();
     return res.json({ success: true, message: "Login successful!" });
 });
 
+app.get('/profile', async (req, res) => {
+  
+  try {
+    
+    // extract image URL
+    const imageUrl = await page.evaluate(() => {
+      const img = document.querySelector('img[src*="resource/Image/SImage"]');
+      return img ? img.src : null;
+    });
+
+    if (!imageUrl) {
+      return res.status(404).json({ success: false, message: 'Profile image not found' });
+    }
+
+    // Download the image
+    const imagePage = await browser.newPage();
+    const viewSource = await imagePage.goto(imageUrl);
+    const buffer = await viewSource.buffer();
+
+    // Return image as base64
+    const base64Image = buffer.toString('base64');
+    res.json({
+      success: true,
+      message: "Profile image retrieved",
+      image: `data:image/jpeg;base64,${base64Image}`
+    });
+
+  } 
+  catch (err) {
+    console.error(' Error:', err);
+    res.status(500).json({ error: 'Failed to retrieve or save image' });
+  }
+  
+  finally {
+    await browser.close();
+  }
+})
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
