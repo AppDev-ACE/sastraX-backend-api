@@ -56,40 +56,26 @@ app.post('/login', async (req, res) => {
 
 app.get('/profile', async (req, res) => {
   
-  try {
-    
-    // extract image URL
-    const imageUrl = await page.evaluate(() => {
-      const img = document.querySelector('img[src*="resource/Image/SImage"]');
-      return img ? img.src : null;
-    });
+   await page.waitForSelector('img[alt="Photo not found"]');
 
-    if (!imageUrl) {
-      return res.status(404).json({ success: false, message: 'Profile image not found' });
-    }
+  // Extract details
+    const profileData = await page.evaluate(() => {
+    const image = document.querySelector('img[alt="Photo not found"]')?.src;
+    const name = document.querySelectorAll('.profile-text-bold')[0]?.innerText.trim();
+    const regNo = document.querySelectorAll('.profile-text')[0]?.innerText.trim();
+    const department = document.querySelectorAll('.profile-text')[1]?.innerText.trim();
+    const semester = document.querySelectorAll('.profile-text')[2]?.innerText.trim();
 
-    // Download the image
-    const imagePage = await browser.newPage();
-    const viewSource = await imagePage.goto(imageUrl);
-    const buffer = await viewSource.buffer();
-
-    // Return image as base64
-    const base64Image = buffer.toString('base64');
-    res.json({
-      success: true,
-      message: "Profile image retrieved",
-      image: `data:image/jpeg;base64,${base64Image}`
-    });
-
-  } 
-  catch (err) {
-    console.error(' Error:', err);
-    res.status(500).json({ error: 'Failed to retrieve or save image' });
-  }
+    return {
+      name,
+      regNo,
+      department,
+      semester,
+      image
+    };
+  });
+    res.json(profileData);
   
-  finally {
-    await browser.close();
-  }
 })
 
 const PORT = process.env.PORT || 3000;
