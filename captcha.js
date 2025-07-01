@@ -50,8 +50,98 @@ app.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: msg });
     }
 
-    //await browser.close();
     return res.json({ success: true, message: "Login successful!" });
+});
+
+  // To fetch profile details
+  app.get('/profile', async (req, res) => {
+    
+    await page.waitForSelector('img[alt="Photo not found"]');
+
+    // Extract details
+      const profileData = await page.evaluate(() => {
+      const image = document.querySelector('img[alt="Photo not found"]')?.src;
+      const name = document.querySelectorAll('.profile-text-bold')[0]?.innerText.trim();
+      const regNo = document.querySelectorAll('.profile-text')[0]?.innerText.trim();
+      const department = document.querySelectorAll('.profile-text')[1]?.innerText.trim();
+      const semester = document.querySelectorAll('.profile-text')[2]?.innerText.trim();
+
+      return {
+        name,
+        regNo,
+        department,
+        semester,
+        image
+      };
+    });
+      res.json(profileData);
+  });
+
+// To fetch attendance
+app.get('/attendance',async (req,res) => {
+    try
+    {
+      await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
+      await page.waitForSelector('#divAttendance', { timeout: 5000 });
+
+      const attendanceHTML = await page.$eval("#divAttendance span", el => el.innerText);
+      res.json({"success":true,attendanceHTML});
+    }
+    catch(error)
+    {
+      res.status(500).json({ success: false, message: "Failed to fetch attendance" });
+    }
+    //await browser.close();
+});
+
+// To fetch SASTRA due
+app.get('/sastraDue',async (req,res) => {
+    try
+    {
+      await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=1");
+      
+      const totalSastraDue = await page.evaluate(() => {
+        const table = document.querySelector("table");
+        const tbody = table.querySelector("tbody"); 
+        const rows = Array.from(tbody.getElementsByTagName("tr")); 
+        for (const row of rows)
+        {
+          const columns = row.getElementsByTagName("td"); 
+          if (columns[0].innerText === "Total :")
+            return columns[1].innerText;
+        }
+      });
+      res.json({ success: true, totalSastraDue });
+    }
+    catch(error)
+    {
+      res.status(500).json({ success: false, message: "Failed to fetch due amount", error: error.message });
+    }
+});
+
+// To fetch Hostel due
+app.get('/sastraDue',async (req,res) => {
+    try
+    {
+      await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=2");
+      
+      const totalHostelDue = await page.evaluate(() => {
+        const table = document.querySelector("table");
+        const tbody = table.querySelector("tbody"); 
+        const rows = Array.from(tbody.getElementsByTagName("tr")); 
+        for (const row of rows)
+        {
+          const columns = row.getElementsByTagName("td"); 
+          if (columns[0].innerText === "Total :")
+            return columns[1].innerText;
+        }
+      });
+      res.json({ success: true, totalHostelDue });
+    }
+    catch(error)
+    {
+      res.status(500).json({ success: false, message: "Failed to fetch due amount", error: error.message });
+    }
 });
 
 const PORT = process.env.PORT || 3000;
