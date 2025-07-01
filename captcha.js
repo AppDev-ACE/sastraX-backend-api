@@ -17,7 +17,7 @@ app.get('/captcha', async (req, res) => {
     await page.goto("https://webstream.sastra.edu/sastrapwi/");
     await new Promise(resolve => setTimeout(resolve, 1500));
     await page.waitForSelector('#imgCaptcha', { timeout: 5000 });
-    const captchaPath = path.join(__dirname, 'captcha.png');
+    const captchaPath = '/tmp/captcha.png';
     const captchaElement = await page.$('#imgCaptcha');
     await captchaElement.screenshot({ path: captchaPath });
 
