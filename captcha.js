@@ -54,30 +54,6 @@ app.post('/login', async (req, res) => {
     return res.json({ success: true, message: "Login successful!" });
 });
 
-app.get('/profile', async (req, res) => {
-  
-   await page.waitForSelector('img[alt="Photo not found"]');
-
-  // Extract details
-    const profileData = await page.evaluate(() => {
-    const image = document.querySelector('img[alt="Photo not found"]')?.src;
-    const name = document.querySelectorAll('.profile-text-bold')[0]?.innerText.trim();
-    const regNo = document.querySelectorAll('.profile-text')[0]?.innerText.trim();
-    const department = document.querySelectorAll('.profile-text')[1]?.innerText.trim();
-    const semester = document.querySelectorAll('.profile-text')[2]?.innerText.trim();
-
-    return {
-      name,
-      regNo,
-      department,
-      semester,
-      image
-    };
-  });
-    res.json(profileData);
-  
-})
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`API running at http://localhost:${PORT}`);
