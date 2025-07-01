@@ -8,6 +8,6 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "puppeteer": "^21.3.8" 
+    "puppeteer": "^24.11.1"
   }
 }
