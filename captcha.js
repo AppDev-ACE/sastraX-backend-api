@@ -6,6 +6,7 @@ const cors = require('cors');
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 // To provide captcha to the UI
 app.get('/captcha', async (req, res) => {
@@ -29,7 +30,7 @@ app.get('/captcha', async (req, res) => {
 // To get the reg no, password and captcha from the user and login
 app.post('/login', async (req, res) => {
   const { regno, pwd, captcha } = req.body;
-  
+
     const browser = await puppeteer.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
