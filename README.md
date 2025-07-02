@@ -16,4 +16,4 @@ API Endpoints:
  - /hostelDue: To fetch the total Hostel fee due (GET)
  - /subjectWiseAttendance: To fetch subject-wise attendance (GET)
 
-API is temporarily hosted in public for testing purpose
+API is temporarily hosted in CLOUDFLARED for testing purpose
