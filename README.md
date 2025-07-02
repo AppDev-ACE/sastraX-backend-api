@@ -15,5 +15,7 @@ API Endpoints:
  - /sastraDue: To fetch the total SASTRA fee due (GET)
  - /hostelDue: To fetch the total Hostel fee due (GET)
  - /subjectWiseAttendance: To fetch subject-wise attendance (GET)
+ - /semGrades: To fetch semester-wise grades and credits (GET)
+ - /messMenu: To fetch mess menu (GET)
 
 API is temporarily hosted in CLOUDFLARED for testing purpose
