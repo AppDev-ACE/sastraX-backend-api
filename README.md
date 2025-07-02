@@ -1,10 +1,4 @@
-This is a Node.js-based backend API built using Puppeteer to automate login and scrape data from the SASTRA University student portal. It provides endpoints for  (as of now):
-
-- Fetching captcha image
-- Student login validation
-- Attendance percentage
-- Fee due amount
-
+This is a Node.js-based backend API built using Puppeteer to automate login and scrape data from the SASTRA University student portal.
 
 API Endpoints:
  - /captcha: To fetch captcha and display in UI (GET)
