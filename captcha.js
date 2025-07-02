@@ -55,27 +55,36 @@ app.post('/login', async (req, res) => {
 
 // To fetch profile details
 app.get('/profile', async (req, res) => {
-  
-  await page.waitForSelector('img[alt="Photo not found"]');
-
-  // Extract details
+    await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
+    await page.waitForSelector('img[alt="Photo not found"]');
     const profileData = await page.evaluate(() => {
-    //const image = document.querySelector('img[alt="Photo not found"]')?.src;
-    const name = document.querySelectorAll('.profile-text-bold')[0]?.innerText.trim();
-    const regNo = document.querySelectorAll('.profile-text')[0]?.innerText.trim();
-    const department = document.querySelectorAll('.profile-text')[1]?.innerText.trim();
-    const semester = document.querySelectorAll('.profile-text')[2]?.innerText.trim();
+      const name = document.querySelectorAll('.profile-text-bold')[0]?.innerText.trim();
+      const regNo = document.querySelectorAll('.profile-text')[0]?.innerText.trim();
+      const department = document.querySelectorAll('.profile-text')[1]?.innerText.trim();
+      const semester = document.querySelectorAll('.profile-text')[2]?.innerText.trim();
 
-    return {
-      name,
-      regNo,
-      department,
-      semester,
-      //image
-    };
-  });
-    res.json(profileData);
+      return {
+        name,
+        regNo,
+        department,
+        semester,
+      };
+    });
+    res.json({success: true,profileData});
 });
+
+// To fetch profile picture
+app.get('/profilePic', async(req, res) => {
+    await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
+    await page.waitForSelector('img[alt="Photo not found"]');
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    const profilePath = path.join(__dirname, 'profile.png');
+    const profileElement = await page.$('img[alt="Photo not found"]');
+    await profileElement.screenshot({ path: profilePath });
+
+    res.sendFile(profilePath);
+})
 
 // To fetch attendance
 app.get('/attendance',async (req,res) => {
