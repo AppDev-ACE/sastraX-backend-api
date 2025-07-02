@@ -91,7 +91,6 @@ app.get('/attendance',async (req,res) => {
     {
       res.status(500).json({ success: false, message: "Failed to fetch attendance" });
     }
-    //await browser.close();
 });
 
 // To fetch SASTRA due
@@ -100,8 +99,16 @@ app.get('/sastraDue',async (req,res) => {
     {
       await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=1");
       
+      let table;
+      try
+      {
+        table = document.querySelector("table");
+      }
+      catch
+      {
+        return res.json({ success: true, due: "No records found" });
+      }
       const totalSastraDue = await page.evaluate(() => {
-        const table = document.querySelector("table");
         const tbody = table.querySelector("tbody"); 
         const rows = Array.from(tbody.getElementsByTagName("tr")); 
         for (const row of rows)
@@ -120,20 +127,28 @@ app.get('/sastraDue',async (req,res) => {
 });
 
 // To fetch Hostel due
-app.get('/sastraDue',async (req,res) => {
+app.get('/hostelDue',async (req,res) => {
     try
     {
       await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=2");
-      
+
+      let table;
+      try
+      {
+        table = document.querySelector("table");
+      }
+      catch
+      {
+        return res.json({ success: true, due: "No records found" });
+      }
       const totalHostelDue = await page.evaluate(() => {
-        const table = document.querySelector("table");
         const tbody = table.querySelector("tbody"); 
         const rows = Array.from(tbody.getElementsByTagName("tr")); 
         for (const row of rows)
         {
           const columns = row.getElementsByTagName("td"); 
           if (columns[0].innerText === "Total :")
-            return columns[1].innerText;
+            return columns[1]?.innerText || "No records found";
         }
       });
       res.json({ success: true, totalHostelDue });
@@ -141,6 +156,46 @@ app.get('/sastraDue',async (req,res) => {
     catch(error)
     {
       res.status(500).json({ success: false, message: "Failed to fetch due amount", error: error.message });
+    }
+});
+
+//Subject - wise Attendance
+app.get('/subjectWiseAttendance',async (req,res) => {
+    try
+    {
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=7");
+      let table;
+      try
+      {
+        table = document.querySelector("table");
+      }
+      catch
+      {
+        return res.json({ success: true, due: "No records found" });
+      }
+      const subjectWiseAttendance = await page.evaluate(() => {
+        const tbody = table.querySelector("tbody"); 
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const attendance = [];
+        for (const row of rows)
+        {
+          const columns = row.getElementsByTagName("td"); 
+          attendance.push({
+              code: columns[0]?.innerText?.trim(),
+              subject: columns[1]?.innerText?.trim(),
+              totalHrs: columns[2]?.innerText?.trim(),
+              presentHrs: columns[3]?.innerText?.trim(),
+              absentHrs: columns[4]?.innerText?.trim(),
+              percentage: columns[5]?.innerText?.trim()
+          });
+        }
+        return attendance;
+      });
+      res.json({ success: true, subjectWiseAttendance });
+    }
+    catch(error)
+    {
+      res.status(500).json({ success: false, message: "Failed to fetch attendance", error: error.message });
     }
 });
 
