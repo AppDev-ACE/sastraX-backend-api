@@ -53,29 +53,29 @@ app.post('/login', async (req, res) => {
     return res.json({ success: true, message: "Login successful!" });
 });
 
-  // To fetch profile details
-  app.get('/profile', async (req, res) => {
-    
-    await page.waitForSelector('img[alt="Photo not found"]');
+// To fetch profile details
+app.get('/profile', async (req, res) => {
+  
+  await page.waitForSelector('img[alt="Photo not found"]');
 
-    // Extract details
-      const profileData = await page.evaluate(() => {
-      const image = document.querySelector('img[alt="Photo not found"]')?.src;
-      const name = document.querySelectorAll('.profile-text-bold')[0]?.innerText.trim();
-      const regNo = document.querySelectorAll('.profile-text')[0]?.innerText.trim();
-      const department = document.querySelectorAll('.profile-text')[1]?.innerText.trim();
-      const semester = document.querySelectorAll('.profile-text')[2]?.innerText.trim();
+  // Extract details
+    const profileData = await page.evaluate(() => {
+    //const image = document.querySelector('img[alt="Photo not found"]')?.src;
+    const name = document.querySelectorAll('.profile-text-bold')[0]?.innerText.trim();
+    const regNo = document.querySelectorAll('.profile-text')[0]?.innerText.trim();
+    const department = document.querySelectorAll('.profile-text')[1]?.innerText.trim();
+    const semester = document.querySelectorAll('.profile-text')[2]?.innerText.trim();
 
-      return {
-        name,
-        regNo,
-        department,
-        semester,
-        image
-      };
-    });
-      res.json(profileData);
+    return {
+      name,
+      regNo,
+      department,
+      semester,
+      //image
+    };
   });
+    res.json(profileData);
+});
 
 // To fetch attendance
 app.get('/attendance',async (req,res) => {
@@ -98,17 +98,10 @@ app.get('/sastraDue',async (req,res) => {
     try
     {
       await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=1");
-      
-      let table;
-      try
-      {
-        table = document.querySelector("table");
-      }
-      catch
-      {
-        return res.json({ success: true, due: "No records found" });
-      }
       const totalSastraDue = await page.evaluate(() => {
+        const table = document.querySelector("table");
+        if (!table)
+            return "No records found";
         const tbody = table.querySelector("tbody"); 
         const rows = Array.from(tbody.getElementsByTagName("tr")); 
         for (const row of rows)
@@ -131,17 +124,10 @@ app.get('/hostelDue',async (req,res) => {
     try
     {
       await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=2");
-
-      let table;
-      try
-      {
-        table = document.querySelector("table");
-      }
-      catch
-      {
-        return res.json({ success: true, due: "No records found" });
-      }
       const totalHostelDue = await page.evaluate(() => {
+        const table = document.querySelector("table");
+        if (!table)
+            return "No records found";
         const tbody = table.querySelector("tbody"); 
         const rows = Array.from(tbody.getElementsByTagName("tr")); 
         for (const row of rows)
@@ -164,17 +150,11 @@ app.get('/subjectWiseAttendance',async (req,res) => {
     try
     {
       await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=7");
-      let table;
-      try
-      {
-        table = document.querySelector("table");
-      }
-      catch
-      {
-        return res.json({ success: true, due: "No records found" });
-      }
-      const subjectWiseAttendance = await page.evaluate(() => {
-        const tbody = table.querySelector("tbody"); 
+      const subjectWiseAttendance = await page.evaluate(() => { 
+        const table = document.querySelector("table");
+        if (!table)
+            return "No records found";
+        const tbody = table.querySelector("tbody");
         const rows = Array.from(tbody.getElementsByTagName("tr"));
         const attendance = [];
         for (const row of rows)
