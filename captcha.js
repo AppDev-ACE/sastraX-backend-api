@@ -222,6 +222,38 @@ app.get('/semGrades', async (req,res) => {
     }
 });
 
+//To fetch status of student (Hosteler/Dayscholar)
+app.get('/studentStatus', async(req,res) => {
+    try
+    {
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=59");
+      const statusData = await page.evaluate(() => {
+        const table = document.querySelector("table");
+        if (!table)
+          return "No records Found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const status =[];
+        for (let i=0;i<rows.length;i++)
+        {
+          const coloumns = rows[i].getElementsByTagName("td");
+          if (i==9)
+          {
+            status.push({
+              status : coloumns[1]?.innerText?.trim(),
+            })
+          }
+        }
+        return status;
+      })
+      return res.json({ sucsess: true, statusData});
+    }
+    catch(error)
+    {
+      res.status(500).json({ sucess:false, message: "Failed to fetch student status", error: error.message });
+    }
+})
+
 // To fetch mess menu
 app.get('/messMenu', async (req,res) => {
     return res.json([
