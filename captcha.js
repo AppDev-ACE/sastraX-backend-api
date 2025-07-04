@@ -252,7 +252,67 @@ app.get('/studentStatus', async(req,res) => {
     {
       res.status(500).json({ sucess:false, message: "Failed to fetch student status", error: error.message });
     }
-})
+});
+
+// To fetch each sem SGPA
+app.get('/sgpa', async(req,res) => {
+    try
+    {
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
+      const sgpaData = await page.evaluate(() => {
+        const table = document.querySelector('table[align="left"]');
+        if (!table)
+          return "No records found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const sgpa = [];
+        for (let i=2;i<rows.length;i++)
+        {
+          const columns = rows[i].getElementsByTagName("td");
+          sgpa.push({
+            sem : columns[0]?.innerText?.trim(),
+            sgpa : columns[1]?.innerText?.trim()
+          });
+        }
+        return sgpa;
+      })
+      return res.json({ success: true, sgpaData});
+    }
+    catch (error)
+    {
+      res.status(500).json({ success: false, meassage: "Failed to fetch SGPA", error: error.meassage });
+    }
+});
+
+// To fetch overall CGPA
+app.get('/cgpa', async(req,res) => {
+    try
+    {
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
+      const cgpaData = await page.evaluate(() => {
+        const table = document.querySelector('table');
+        if (!table)
+          return "No records found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const cgpa = [];
+        for (let i=0;i<rows.length;i++)
+        {
+          const columns = rows[i].getElementsByTagName("td");
+          if (columns[0]?.innerText?.trim() === "CGPA")
+            cgpa.push({
+              cgpa : columns[1]?.innerText?.trim()
+            });
+        }
+        return cgpa;
+      })
+      return res.json({ success: true, cgpaData});
+    }
+    catch (error)
+    {
+      res.status(500).json({ success: false, meassage: "Failed to fetch CGPA", error: error.meassage });
+    }
+});
 
 // To fetch mess menu
 app.get('/messMenu', async (req,res) => {

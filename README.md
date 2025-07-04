@@ -10,6 +10,9 @@ API Endpoints:
  - /hostelDue: To fetch the total Hostel fee due (GET)
  - /subjectWiseAttendance: To fetch subject-wise attendance (GET)
  - /semGrades: To fetch semester-wise grades and credits (GET)
+ - /studentStatus: To fetch student status - Hosteler/Dayschloar (GET)
+ - /sgpa: To fetch SGPA sem-wise (GET)
+ - /cgpa: To fetch overall CGPA (GET)
  - /messMenu: To fetch mess menu (GET)
 
 API is temporarily hosted in CLOUDFLARED for testing purpose
