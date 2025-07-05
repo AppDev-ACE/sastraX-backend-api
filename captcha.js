@@ -314,6 +314,33 @@ app.get('/cgpa', async(req,res) => {
     }
 });
 
+// To fetch DOB
+app.get('/dob', async(req,res) => {
+    try
+    {
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=59");
+      const dobData = await page.evaluate(() => {
+        const table = document.querySelector("table");
+        if (!table)
+          return "No records Found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const dob =[];
+        const coloumns = rows[0].getElementsByTagName("td");
+        dob.push({
+          dob : coloumns[1]?.innerText?.trim(),
+        })
+          
+        return dob;
+      })
+      return res.json({ sucsess: true, dobData});
+    }
+    catch(error)
+    {
+      res.status(500).json({ sucess:false, message: "Failed to fetch DOB", error: error.message });
+    }
+});
+
 // To fetch depatment-wise PYQs
 app.get('/pyq', async(req,res) => {
     return res.json([
