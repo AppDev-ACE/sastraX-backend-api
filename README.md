@@ -13,6 +13,7 @@ API Endpoints:
  - /studentStatus: To fetch student status - Hosteler/Dayschloar (GET)
  - /sgpa: To fetch SGPA sem-wise (GET)
  - /cgpa: To fetch overall CGPA (GET)
+ - /pyq: To fetch department-wise PYQs (GET)
  - /messMenu: To fetch mess menu (GET)
 
 API is temporarily hosted in CLOUDFLARED for testing purpose

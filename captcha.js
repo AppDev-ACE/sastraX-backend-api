@@ -314,6 +314,48 @@ app.get('/cgpa', async(req,res) => {
     }
 });
 
+// To fetch depatment-wise PYQs
+app.get('/pyq', async(req,res) => {
+    return res.json([
+      {
+        dept : "cse-aids",
+        url : "https://drive.google.com/drive/folders/1_HOFZaJmBZOP43EShPrnPcrqMYMn3kTO"
+      },
+      {
+        dept : "cse-core",
+        url : "https://drive.google.com/drive/folders/1Zz_D31EafQG5pb7nrpl2cGOGy5KjpS-K"
+      }, 
+      {
+        dept : "cse-iota",
+        url : "https://drive.google.com/drive/folders/1Zsmed8gEvxJO2lY3ABWkruV0P1TZN-wD"
+      }, 
+      {
+        dept : "cse-ict",
+        url : "https://drive.google.com/drive/folders/12mZUxxoREu80Xd6KxWIRkDlq6wirO_Aa"
+      },
+      {
+        dept : "ece",
+        url : "https://drive.google.com/drive/folders/14ZcBJmmDN5fBGbAYg7T7lIUVjIox7oBi"
+      },
+      {
+        dept : "eee",
+        url : "https://drive.google.com/drive/u/0/folders/1ip6SUn3dqvW0ELpxwsEVJMPD4mQ8g7Jj"
+      },
+      {
+        dept : "eee-sgev",
+        url : "https://drive.google.com/drive/folders/1mR24zrsWJt_8T8H1EmhbGG0kdFC-qReh"
+      },
+      {
+        dept : "mechanical-dm",
+        url : "https://drive.google.com/drive/folders/1CayvomN4rpZBfuPau31JHzxUqKuRuBtJ"
+      },
+      {
+        dept : "mechanical",
+        url : "https://drive.google.com/drive/folders/1ANgc0gyCdwLrVEjirxkguA8f7azEL6PU"
+      },
+    ]);
+});
+
 // To fetch mess menu
 app.get('/messMenu', async (req,res) => {
     return res.json([
