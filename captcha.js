@@ -326,7 +326,7 @@ app.get('/dob', async(req,res) => {
         const tbody = table.querySelector("tbody");
         const rows = Array.from(tbody.getElementsByTagName("tr"));
         const dob =[];
-        const coloumns = rows[0].getElementsByTagName("td");
+        const coloumns = rows[2].getElementsByTagName("td");
         dob.push({
           dob : coloumns[1]?.innerText?.trim(),
         })
