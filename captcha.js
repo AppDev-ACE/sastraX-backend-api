@@ -341,9 +341,234 @@ app.get('/dob', async(req,res) => {
     }
 });
 
+// Chatbot
+const subjectMap = {
+  "co": "https://drive.google.com/drive/folders/12ilquRi9o9yy1RPaUjbcUP1yfCVWHf0_",
+  "ds": "https://drive.google.com/drive/folders/12VT1DKfSzfzbw_IPQIHAB2v6fdJnnqCn",
+  "dsd": "https://drive.google.com/drive/folders/16DZ4xjqVnMEixKJPlIEZOTXBMe73y_2e",
+  "java": [
+    "https://drive.google.com/drive/folders/12inzgU1MvrFL9s6MGw5xpkvGdWDf3QOv",
+    "https://drive.google.com/drive/folders/195Xp_kCGThNAqPrTvQWyxAOP69fxgZXb"
+  ],
+  "m1": "https://drive.google.com/drive/folders/1-WAOXrd-ewtKutuo_jswsyKiathIHsr7",
+  "m2": "https://drive.google.com/drive/folders/1-hwcJ6k6e5KZBEzzzaXAtKDb1CNeFA39",
+  "m3": "https://drive.google.com/drive/folders/1-Hn0sJ7zsap2cKJ-cpNBOdKsO5QcRpEr",
+  "m4": "https://drive.google.com/drive/folders/1YZ7dtwi3hdGXXWSiv2Df2_q8y7bqNB6t",
+  "ca": "https://drive.google.com/drive/folders/1L4qKq23Wh6l8AkQDWPt5k6x--6in3YUF",
+  "dbms": "https://drive.google.com/drive/folders/1K-ieRxpobolPF5yKl6xZ4fVvc_D3GGLJ",
+  "daa": "https://drive.google.com/drive/folders/1G8dqGhGpZmr9ajppmJwb7hnJSJnHQ4lP",
+  "discrete": "https://drive.google.com/drive/folders/15RXLBlh96OhvqbpsuvFCdLsDz6BH_PaI",
+  "mcs": "https://drive.google.com/drive/folders/1avhovlxCuQxZ9Les6--znYB--gEZepSW",
+  "ooad": "https://drive.google.com/drive/folders/1KBwL_u04TDmfKFtfdKvy5Qkt1jhfAU1T",
+  "opengl": "https://drive.google.com/drive/folders/1acmL-qCeXSklo3bndCFVlzzRtP3u2B5V",
+  "ai": "https://drive.google.com/drive/folders/1EwwQ5UQcVO8FRElD-BxoO8HabpyZje_o",
+  "cn": "https://drive.google.com/drive/folders/10YFOPznNKCn4JGjzBYQgq4XVejDAy7Wo",
+  "os": "https://drive.google.com/drive/folders/16ZTZiT5wcjJsSTe3CUugGsLCQu5ozciL",
+  "toc": "https://drive.google.com/drive/folders/1cxEFVeqVQnIoitu5U3LTUw5pUJzmYJ8c",
+  "aids": "https://drive.google.com/drive/folders/1-Z4Wom2FsMOmNMQmExlQ3eJtR9-hhDHt",
+  "dwdm": "https://drive.google.com/drive/folders/1yNM44EK69V3H9uSGw5FdE7UpDWVsh0Ke",
+  "eai": "https://drive.google.com/drive/folders/1_TEENtrs6GNSMbVjtmMV5ZNrTrwKC-aa",
+  "mlt": "https://drive.google.com/drive/folders/1UUbErzkxgjhqynUdt5A7aIDHm035Jkpk",
+  "time series": "https://drive.google.com/drive/folders/1__-5RqCvtOI6tjMO7pJwVjogBPgQtHh1",
+  "bda": "https://drive.google.com/drive/folders/1i4BjVYWmPgv1E6lvgeZCvjGrGLgsQUNi",
+  "dle": "https://drive.google.com/drive/folders/1-0-E0l_flHNww3rMwrNE0Cp-qeoHfEaC",
+  "cns": "http://drive.google.com/drive/folders/1TMdhosfO3mQSjAUafDaaGguu__rjukhL",
+  "compeng": "https://drive.google.com/drive/folders/1U_T8JThRL9KDBitNb2wuK_0Yb8NOct7y",
+  "commeng": "https://drive.google.com/drive/folders/1BgPmU1YJFutzST8Cv5QiTbgX5J4H_keT",
+  "gc": "https://drive.google.com/drive/folders/1UY9HO2zvEDtC4WkTBvePe-FCTUqQgoCw",
+  "nlp": "https://drive.google.com/drive/folders/1BPkfod2sSszTWypImhjS1e30XqnTJY6s",
+  "se": "https://drive.google.com/drive/folders/1mS9g6b-YzpB4uLhjXthptONcZm_glkyM",
+  "cc": "https://drive.google.com/drive/folders/1i3tN__g9N4Hmv_q-oMLUnVeeVv51IB5i",
+  "fswad": "https://drive.google.com/drive/folders/1iFjyCCUmgHLmrIvM58qMX_jcVni5rhtV",
+  "iot": "https://drive.google.com/drive/folders/1CJzkMP6tRhuhMsC1gy38KB09nNHqNeA7",
+  "ot": "https://drive.google.com/drive/folders/1GAoEohZco0eeKeKKHZeCds6_CU6QriyY",
+  "pds": "https://drive.google.com/drive/folders/1xjVpvvHRzyNzOhKwZF3tsmOyZZTvinxZ",
+  "sensors": "https://drive.google.com/drive/folders/1aAo03DfIX4uUOUXzz_0gFaoXXKNgOG7v",
+  "ec": "https://drive.google.com/drive/folders/1a4ySfl4T5zvV4BjE8smhiwBMtEG4-6WM",
+  "eie": "https://drive.google.com/drive/folders/19E0xCRx2WM3rMcVHLUdpRrOYktyGSJ59",
+  "coa": "https://drive.google.com/drive/folders/1JvMEMQQp1DI_bk4XrTprgZHySn_YNaA_",
+  "dcn": "https://drive.google.com/drive/folders/17KnsJA0f4VR7SPK1suLyxicqUEpSt21I",
+  "ss": "https://drive.google.com/drive/folders/1328YXH_UeCqdMi1LJCxLtRLeohdimr-N"
+};
+
+const subjectAliasMap = {
+  "computer organisation": "co",
+  "computer organization": "co",
+  "co": "co",
+
+  "data structures": "ds",
+  "ds": "ds",
+
+  "digital system design": "dsd",
+  "dsd": "dsd",
+
+  "java": "java",
+  "java programming": "java",
+  "java language": "java",
+
+  "engineering math 1": "m1",
+  "math 1": "m1",
+  "m1": "m1",
+
+  "engineering math 2": "m2",
+  "math 2": "m2",
+  "m2": "m2",
+
+  "engineering math 3": "m3",
+  "math 3": "m3",
+  "m3": "m3",
+
+  "engineering math 4": "m4",
+  "math 4": "m4",
+  "m4": "m4",
+
+  "computer architecture": "ca",
+  "ca": "ca",
+
+  "database management system": "dbms",
+  "database": "dbms",
+  "dbms": "dbms",
+
+  "design and analysis of algorithm": "daa",
+  "algorithms": "daa",
+  "daa": "daa",
+
+  "math for cyber security": "mcs",
+  "mcs": "mcs",
+
+  "object oriented analysis and design": "ooad",
+  "ooad": "ooad",
+
+  "computer graphics using opengl": "opengl",
+  "graphics": "opengl",
+  "opengl": "opengl",
+
+  "artificial intelligence": "ai",
+  "ai": "ai",
+
+  "computer network": "cn",
+  "computer networks": "cn",
+  "cn": "cn",
+
+  "operating system": "os",
+  "os": "os",
+
+  "theory of computation": "toc",
+  "toc": "toc",
+
+  "artificial intelligence and data science": "aids",
+  "aids": "aids",
+
+  "data warehouse and data mining": "dwdm",
+  "dwdm": "dwdm",
+
+  "explainable ai": "eai",
+  "eai": "eai",
+
+  "machine learning techniques": "mlt",
+  "machine learning": "mlt",
+  "ml": "mlt",
+  "mlt": "mlt",
+
+  "time series": "time series",
+  "ts": "time series",
+
+  "big data analytics": "bda",
+  "bda": "bda",
+
+  "deep learning essentials": "dle",
+  "dle": "dle",
+
+  "cryptography and network security": "cns",
+  "cns": "cns",
+
+  "compiler engineering": "compeng",
+  "compiler design": "compeng",
+  "comp eng": "compeng",
+  "compeng": "compeng",
+
+  "communication engineering": "commeng",
+  "comm eng": "commeng",
+  "commeng": "commeng",
+
+  "green computing": "gc",
+  "gc": "gc",
+
+  "natural language processing": "nlp",
+  "nlp": "nlp",
+
+  "software engineering": "se",
+  "se": "se",
+
+  "cloud computing": "cc",
+  "cc": "cc",
+
+  "full stack application development": "fswad",
+  "fswad": "fswad",
+
+  "internet of things": "iot",
+  "iot": "iot",
+
+  "optimization techniques": "ot",
+  "ot": "ot",
+
+  "parallel and distributive system": "pds",
+  "parallel & distributive system": "pds",
+  "pds": "pds",
+
+  "sensors and actuators": "sensors",
+  "sensors": "sensors",
+
+  "embedded computing": "ec",
+  "ec": "ec",
+
+  "electronic circuits": "eie",
+  "eie": "eie",
+
+  "computer organisation and architecture": "coa",
+  "computer organization and architecture": "coa",
+  "coa": "coa",
+
+  "data communication and networks": "dcn",
+  "data communication": "dcn",
+  "dcn": "dcn",
+
+  "signals and systems": "ss",
+  "ss": "ss"
+};
+
+app.post('/chatbot', async(req,res) => {
+    try
+    {
+        let { message } = req.body;
+        if (!message)
+          return res.json({ reply: "Say something to get started" });
+        message = message.toLowerCase();
+        let subjects = Object.keys(subjectAliasMap).sort((x,y) => y.length - x.length);
+        const matchedKey = subjects.find((key) => message.includes(key))
+        if (matchedKey)
+        {
+            const value = subjectAliasMap[matchedKey];
+            if (matchedKey)
+            {
+              return res.json({ reply: "Here is your drive link for "+matchedKey+" PYQs. "+subjectMap[value]});
+            }
+            else
+            {
+              return res.json({ reply: "Sorry! I couldn't find any PYQs for your query" });
+            }
+        }
+    }
+    catch(error)
+    {
+        res.status(500).json({ success: true, message: "Chatbot Error", error: error.message});
+    }
+});
+
 // To fetch depatment-wise PYQs
 app.get('/pyq', async(req,res) => {
     return res.json([
+
       {
         dept : "cse-aids",
         url : "https://drive.google.com/drive/folders/1_HOFZaJmBZOP43EShPrnPcrqMYMn3kTO"

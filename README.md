@@ -14,6 +14,7 @@ API Endpoints:
  - /sgpa: To fetch SGPA sem-wise (GET)
  - /cgpa: To fetch overall CGPA (GET)
  - /pyq: To fetch department-wise PYQs (GET)
+ - /chatbot: To fetch PYQs based on text(input message) in community chat (GET)
  - /messMenu: To fetch mess menu (GET)
 
 API is temporarily hosted in CLOUDFLARED for testing purpose
