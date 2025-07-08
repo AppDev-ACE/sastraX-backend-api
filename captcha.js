@@ -10,6 +10,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+admin.initializeApp({
+  credential : admin.credential.cert(serviceAccount)
+});
+const db = admin.firestore();
+
 let browser,page;
 
 // To provide captcha to the UI
@@ -55,24 +60,57 @@ app.post('/login', async (req, res) => {
     return res.json({ success: true, message: "Login successful!" });
 });
 
-// To fetch profile details
-app.get('/profile', async (req, res) => {
-    await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
-    await page.waitForSelector('img[alt="Photo not found"]');
-    const profileData = await page.evaluate(() => {
-      const name = document.querySelectorAll('.profile-text-bold')[0]?.innerText.trim();
-      const regNo = document.querySelectorAll('.profile-text')[0]?.innerText.trim();
-      const department = document.querySelectorAll('.profile-text')[1]?.innerText.trim();
-      const semester = document.querySelectorAll('.profile-text')[2]?.innerText.trim();
+async function getRegNoFromPage(page) {
+  return await page.evaluate(() => {
+    return document.querySelectorAll('.profile-text')[0]?.innerText.trim();
+  });
+}
 
-      return {
-        name,
-        regNo,
-        department,
-        semester,
-      };
-    });
-    res.json({success: true,profileData});
+// To fetch profile details
+app.post('/profile', async (req, res) => {
+    const { refresh } = req.body;
+    try
+    {
+      await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
+      await page.waitForSelector('img[alt="Photo not found"]');
+
+      //Storing data in Firestore
+      const registerNo = await getRegNoFromPage(page);
+      const docRef = db.collection("studentDetails").doc(registerNo);
+      const doc = await docRef.get();
+      if (!doc.exists || refresh || !doc.data().profile)
+      {
+        //If data not found in DB or if refreshed by user, scraping from SWI
+        const profileData = await page.evaluate(() => {
+          const name = document.querySelectorAll('.profile-text-bold')[0]?.innerText.trim();
+          const regNo = document.querySelectorAll('.profile-text')[0]?.innerText.trim();
+          const department = document.querySelectorAll('.profile-text')[1]?.innerText.trim();
+          const semester = document.querySelectorAll('.profile-text')[2]?.innerText.trim();
+
+          return{
+            name,
+            regNo,
+            department,
+            semester,
+          };
+        });
+        
+        await docRef.set({
+          profile : profileData,
+          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        },{merge: true});
+        res.json({success: true, profileData});
+      }  
+      else
+      {
+        //Else, fetch from firestore
+        res.json({success: true,profile: doc.data().profile});
+      }
+    }
+    catch (error)
+    {
+      res.status(500).json({ success: false, error: "Server error" });
+    }
 });
 
 // To fetch profile picture
@@ -89,14 +127,31 @@ app.get('/profilePic', async(req, res) => {
 })
 
 // To fetch attendance
-app.get('/attendance',async (req,res) => {
+app.post('/attendance',async (req,res) => {
+    const { refresh } = req.body;
     try
     {
-      await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
-      await page.waitForSelector('#divAttendance', { timeout: 5000 });
+      //Storing attendance in Firestore
+      const regNo = await getRegNoFromPage(page);
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
 
-      const attendanceHTML = await page.$eval("#divAttendance span", el => el.innerText);
-      res.json({"success":true,attendanceHTML});
+      if (!doc.exists || refresh || !doc.data().attendance)
+      {
+        await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
+        await page.waitForSelector('#divAttendance', { timeout: 5000 });
+        const attendanceHTML = await page.$eval("#divAttendance span", el => el.innerText);
+        
+        await docRef.set({
+          attendance : attendanceHTML,
+          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        },{merge:true});
+        res.json({success: true,attendanceHTML});
+      }
+      else
+      {
+        res.json({success: true,attendance: doc.data().attendance});
+      }   
     }
     catch(error)
     {
@@ -105,24 +160,42 @@ app.get('/attendance',async (req,res) => {
 });
 
 // To fetch SASTRA due
-app.get('/sastraDue',async (req,res) => {
+app.post('/sastraDue',async (req,res) => {
+    const { refresh } = req.body;
     try
     {
-      await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=1");
-      const totalSastraDue = await page.evaluate(() => {
-        const table = document.querySelector("table");
-        if (!table)
-            return "No records found";
-        const tbody = table.querySelector("tbody"); 
-        const rows = Array.from(tbody.getElementsByTagName("tr")); 
-        for (const row of rows)
-        {
-          const columns = row.getElementsByTagName("td"); 
-          if (columns[0].innerText === "Total :")
-            return columns[1].innerText;
-        }
-      });
-      res.json({ success: true, totalSastraDue });
+      //Storing sastra due in Firestore
+      const regNo = await getRegNoFromPage(page);
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().sastraDue)
+      {
+          await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=1");
+          const totalSastraDue = await page.evaluate(() => {
+            const table = document.querySelector("table");
+            if (!table)
+                return "No records found";
+            const tbody = table.querySelector("tbody"); 
+            const rows = Array.from(tbody.getElementsByTagName("tr")); 
+            for (const row of rows)
+            {
+              const columns = row.getElementsByTagName("td"); 
+              if (columns[0].innerText === "Total :")
+                return columns[1].innerText;
+            }
+          });
+
+          await docRef.set({
+            sastraDue : totalSastraDue,
+            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+          },{merge:true});
+          res.json({success: true,totalSastraDue});
+      }
+      else
+      {
+        res.json({success: true,sastraDue: doc.data().sastraDue});
+      }
     }
     catch(error)
     {
@@ -131,24 +204,42 @@ app.get('/sastraDue',async (req,res) => {
 });
 
 // To fetch Hostel due
-app.get('/hostelDue',async (req,res) => {
+app.post('/hostelDue',async (req,res) => {
+    const { refresh } = req.body;
     try
     {
-      await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=2");
-      const totalHostelDue = await page.evaluate(() => {
-        const table = document.querySelector("table");
-        if (!table)
-            return "No records found";
-        const tbody = table.querySelector("tbody"); 
-        const rows = Array.from(tbody.getElementsByTagName("tr")); 
-        for (const row of rows)
-        {
-          const columns = row.getElementsByTagName("td"); 
-          if (columns[0].innerText === "Total :")
-            return columns[1]?.innerText || "No records found";
-        }
-      });
-      res.json({ success: true, totalHostelDue });
+      //Storing hostel due in Firestore
+      const regNo = await getRegNoFromPage(page);
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().hostelDue)
+      {
+          await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=2");
+          const totalHostelDue = await page.evaluate(() => {
+            const table = document.querySelector("table");
+            if (!table)
+                return "No records found";
+            const tbody = table.querySelector("tbody"); 
+            const rows = Array.from(tbody.getElementsByTagName("tr")); 
+            for (const row of rows)
+            {
+              const columns = row.getElementsByTagName("td"); 
+              if (columns[0].innerText === "Total :")
+                return columns[1]?.innerText || "No records found";
+            }
+          });
+          
+          await docRef.set({
+            hostelDue : totalHostelDue,
+            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+          },{merge:true});
+          res.json({success: true,totalHostelDue});
+      }
+      else
+      {
+        res.json({success: true,hostelDue: doc.data().hostelDue});
+      }
     }
     catch(error)
     {
@@ -191,32 +282,50 @@ app.get('/subjectWiseAttendance',async (req,res) => {
 });
 
 // To fetch semester-wise grades & credits
-app.get('/semGrades', async (req,res) => {
+app.post('/semGrades', async (req,res) => {
+    const { refresh } = req.body;
     try
     {
-      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
-      const gradeData = await page.evaluate(() => {
-        const table = document.querySelector("table");
-        if (!table)
-          return "No records found";
-        const tbody = table.querySelector("tbody");
-        const rows = Array.from(tbody.getElementsByTagName("tr"));
-        const gradeCredit = [];
-        for (let i=2;i<rows.length-1;i++)
-        {
-          const columns = rows[i].getElementsByTagName("td");
-          gradeCredit.push({
-            sem : columns[0]?.innerText?.trim(),
-            monthYear : columns[1]?.innerText?.trim(),
-            code : columns[2]?.innerText?.trim(),
-            subject : columns[3]?.innerText?.trim(),
-            credit : columns[5]?.innerText?.trim(),
-            grade : columns[6]?.innerText?.trim()
+      //Storing sem-wise grades in Firestore
+      const regNo = await getRegNoFromPage(page);
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().semGrades)
+      {
+          await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
+          const gradeData = await page.evaluate(() => {
+            const table = document.querySelector("table");
+            if (!table)
+              return "No records found";
+            const tbody = table.querySelector("tbody");
+            const rows = Array.from(tbody.getElementsByTagName("tr"));
+            const gradeCredit = [];
+            for (let i=2;i<rows.length-1;i++)
+            {
+              const columns = rows[i].getElementsByTagName("td");
+              gradeCredit.push({
+                sem : columns[0]?.innerText?.trim(),
+                monthYear : columns[1]?.innerText?.trim(),
+                code : columns[2]?.innerText?.trim(),
+                subject : columns[3]?.innerText?.trim(),
+                credit : columns[5]?.innerText?.trim(),
+                grade : columns[6]?.innerText?.trim()
+              });
+            }
+            return gradeCredit;
           });
-        }
-        return gradeCredit;
-      })
-      return res.json({ success: true, gradeData});
+          
+          await docRef.set({
+            semGrades : gradeData,
+            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+          },{merge:true});
+          res.json({success: true,gradeData});
+      }
+      else
+      {
+        res.json({success: true,semGrades: doc.data().semGrades});
+      }
     }
     catch(error)
     {
@@ -225,30 +334,48 @@ app.get('/semGrades', async (req,res) => {
 });
 
 //To fetch status of student (Hosteler/Dayscholar)
-app.get('/studentStatus', async(req,res) => {
+app.post('/studentStatus', async(req,res) => {
+    const { refresh } = req.body;
     try
     {
-      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=59");
-      const statusData = await page.evaluate(() => {
-        const table = document.querySelector("table");
-        if (!table)
-          return "No records Found";
-        const tbody = table.querySelector("tbody");
-        const rows = Array.from(tbody.getElementsByTagName("tr"));
-        const status =[];
-        for (let i=0;i<rows.length;i++)
-        {
-          const coloumns = rows[i].getElementsByTagName("td");
-          if (i==9)
+      //Storing sem-wise grades in Firestore
+      const regNo = await getRegNoFromPage(page);
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().studentStatus)
+      { 
+        await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=59");
+        const statusData = await page.evaluate(() => {
+          const table = document.querySelector("table");
+          if (!table)
+            return "No records Found";
+          const tbody = table.querySelector("tbody");
+          const rows = Array.from(tbody.getElementsByTagName("tr"));
+          const status =[];
+          for (let i=0;i<rows.length;i++)
           {
-            status.push({
-              status : coloumns[1]?.innerText?.trim(),
-            })
+            const coloumns = rows[i].getElementsByTagName("td");
+            if (i==9)
+            {
+              status.push({
+                status : coloumns[1]?.innerText?.trim(),
+              })
+            }
           }
-        }
-        return status;
-      })
-      return res.json({ sucsess: true, statusData});
+          return status;
+        });
+        
+        await docRef.set({
+          studentStatus : statusData,
+          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        },{merge:true});
+        res.json({success: true,statusData});
+      }
+      else
+      {
+        res.json({success: true,studentStatus: doc.data().studentStatus});
+      }
     }
     catch(error)
     {
@@ -257,28 +384,45 @@ app.get('/studentStatus', async(req,res) => {
 });
 
 // To fetch each sem SGPA
-app.get('/sgpa', async(req,res) => {
+app.post('/sgpa', async(req,res) => {
+    const { refresh } = req.body;
     try
     {
-      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
-      const sgpaData = await page.evaluate(() => {
-        const table = document.querySelector('table[align="left"]');
-        if (!table)
-          return "No records found";
-        const tbody = table.querySelector("tbody");
-        const rows = Array.from(tbody.getElementsByTagName("tr"));
-        const sgpa = [];
-        for (let i=2;i<rows.length;i++)
-        {
-          const columns = rows[i].getElementsByTagName("td");
-          sgpa.push({
-            sem : columns[0]?.innerText?.trim(),
-            sgpa : columns[1]?.innerText?.trim()
-          });
-        }
-        return sgpa;
-      })
-      return res.json({ success: true, sgpaData});
+      //Storing sem-wise grades in Firestore
+      const regNo = await getRegNoFromPage(page);
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().sgpa)
+      { 
+        await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
+        const sgpaData = await page.evaluate(() => {
+          const table = document.querySelector('table[align="left"]');
+          if (!table)
+            return "No records found";
+          const tbody = table.querySelector("tbody");
+          const rows = Array.from(tbody.getElementsByTagName("tr"));
+          const sgpa = [];
+          for (let i=2;i<rows.length;i++)
+          {
+            const columns = rows[i].getElementsByTagName("td");
+            sgpa.push({
+              sem : columns[0]?.innerText?.trim(),
+              sgpa : columns[1]?.innerText?.trim()
+            });
+          }
+          return sgpa;
+        });
+        await docRef.set({
+          sgpa : sgpaData,
+          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        },{merge:true});
+        res.json({success: true,sgpaData});
+      }
+      else
+      {
+        res.json({success: true,sgpa: doc.data().sgpa});
+      }
     }
     catch (error)
     {
@@ -287,28 +431,47 @@ app.get('/sgpa', async(req,res) => {
 });
 
 // To fetch overall CGPA
-app.get('/cgpa', async(req,res) => {
+app.post('/cgpa', async(req,res) => {
+    const { refresh } = req.body;
     try
     {
-      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
-      const cgpaData = await page.evaluate(() => {
-        const table = document.querySelector('table');
-        if (!table)
-          return "No records found";
-        const tbody = table.querySelector("tbody");
-        const rows = Array.from(tbody.getElementsByTagName("tr"));
-        const cgpa = [];
-        for (let i=0;i<rows.length;i++)
-        {
-          const columns = rows[i].getElementsByTagName("td");
-          if (columns[0]?.innerText?.trim() === "CGPA")
-            cgpa.push({
-              cgpa : columns[1]?.innerText?.trim()
-            });
-        }
-        return cgpa;
-      })
-      return res.json({ success: true, cgpaData});
+      //Storing sem-wise grades in Firestore
+      const regNo = await getRegNoFromPage(page);
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().cgpa)
+      { 
+          await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
+          const cgpaData = await page.evaluate(() => {
+            const table = document.querySelector('table');
+            if (!table)
+              return "No records found";
+            const tbody = table.querySelector("tbody");
+            const rows = Array.from(tbody.getElementsByTagName("tr"));
+            const cgpa = [];
+            for (let i=0;i<rows.length;i++)
+            {
+              const columns = rows[i].getElementsByTagName("td");
+              if (columns[0]?.innerText?.trim() === "CGPA")
+                cgpa.push({
+                  cgpa : columns[1]?.innerText?.trim()
+                });
+            }
+            return cgpa;
+          });
+          
+          await docRef.set({
+            cgpa : cgpaData,
+            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+          },{merge:true});
+          res.json({success: true,cgpaData});
+      }
+      else
+      {
+        res.json({success: true,cgpa: doc.data().cgpa});
+      }
+      
     }
     catch (error)
     {
@@ -317,25 +480,43 @@ app.get('/cgpa', async(req,res) => {
 });
 
 // To fetch DOB
-app.get('/dob', async(req,res) => {
+app.post('/dob', async(req,res) => {
+    const { refresh } = req.body;
     try
     {
-      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=59");
-      const dobData = await page.evaluate(() => {
-        const table = document.querySelector("table");
-        if (!table)
-          return "No records Found";
-        const tbody = table.querySelector("tbody");
-        const rows = Array.from(tbody.getElementsByTagName("tr"));
-        const dob =[];
-        const coloumns = rows[2].getElementsByTagName("td");
-        dob.push({
-          dob : coloumns[1]?.innerText?.trim(),
-        })
-          
-        return dob;
-      })
-      return res.json({ sucsess: true, dobData});
+      //Storing sem-wise grades in Firestore
+      const regNo = await getRegNoFromPage(page);
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().dob)
+      { 
+          await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=59");
+          const dobData = await page.evaluate(() => {
+            const table = document.querySelector("table");
+            if (!table)
+              return "No records Found";
+            const tbody = table.querySelector("tbody");
+            const rows = Array.from(tbody.getElementsByTagName("tr"));
+            const dob =[];
+            const coloumns = rows[2].getElementsByTagName("td");
+            dob.push({
+              dob : coloumns[1]?.innerText?.trim(),
+            })
+              
+            return dob;
+          });
+
+          await docRef.set({
+            dob : dobData,
+            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+          },{merge:true});
+          res.json({success: true,dobData});
+      }
+      else
+      {
+        res.json({success: true,dob: doc.data().dob});
+      }
     }
     catch(error)
     {
@@ -611,10 +792,6 @@ app.get('/pyq', async(req,res) => {
 });
 
 // To fetch mess menu
-admin.initializeApp({
-  credential : admin.credential.cert(serviceAccount)
-});
-const db = admin.firestore();
 const menuData = [
       //Week 1
       {
