@@ -3,6 +3,8 @@ const puppeteer = require('puppeteer');
 const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
+const admin = require('firebase-admin');
+const serviceAccount = require('./serviceAccountKey.json');
 
 const app = express();
 app.use(cors());
@@ -609,8 +611,11 @@ app.get('/pyq', async(req,res) => {
 });
 
 // To fetch mess menu
-app.get('/messMenu', async (req,res) => {
-    return res.json([
+admin.initializeApp({
+  credential : admin.credential.cert(serviceAccount)
+});
+const db = admin.firestore();
+const menuData = [
       //Week 1
       {
         week : "1",
@@ -842,7 +847,22 @@ app.get('/messMenu', async (req,res) => {
         snacks: ["Tea, Milk and Coffee","Cream Bun"],
         dinner: ["Idly","Sambar","Coconut Chutney","Chappathi","Mix Veg Gravy","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
       },
-    ]);
+    ];
+app.get('/messMenu', async (req,res) => {
+    try
+    {
+        const docRef = db.collection("cache").doc("messMenu");
+        const doc = await docRef.get();
+        await docRef.set({
+          menu : menuData,
+          lastUpdated : new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        });
+        return res.json(menuData);
+    }
+    catch(error)
+    {
+        res.status(500).json({ success: false, error: "Server error" });
+    }
 });
 
 const PORT = process.env.PORT || 3000;
