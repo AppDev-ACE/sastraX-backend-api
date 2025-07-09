@@ -338,7 +338,7 @@ app.post('/studentStatus', async(req,res) => {
     const { refresh } = req.body;
     try
     {
-      //Storing sem-wise grades in Firestore
+      //Storing student status in Firestore
       const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
@@ -388,7 +388,7 @@ app.post('/sgpa', async(req,res) => {
     const { refresh } = req.body;
     try
     {
-      //Storing sem-wise grades in Firestore
+      //Storing SGPA in Firestore
       const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
@@ -435,7 +435,7 @@ app.post('/cgpa', async(req,res) => {
     const { refresh } = req.body;
     try
     {
-      //Storing sem-wise grades in Firestore
+      //Storing CGPA in Firestore
       const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
@@ -484,7 +484,7 @@ app.post('/dob', async(req,res) => {
     const { refresh } = req.body;
     try
     {
-      //Storing sem-wise grades in Firestore
+      //Storing DOB grades in Firestore
       const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
@@ -522,6 +522,121 @@ app.post('/dob', async(req,res) => {
     {
       res.status(500).json({ sucess:false, message: "Failed to fetch DOB", error: error.message });
     }
+});
+
+// To fetch faculty list
+app.post('/facultyList', async  (req,res) => {
+    const { refresh } =  req.body;
+    try
+    {
+      //Storing faculty list in Firestore
+      const regNo = await getRegNoFromPage(page);
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().facultyList)
+      { 
+          await page.goto("https://webstream.sastra.edu/sastrapwi/academy/frmStudentTimetable.jsp");
+          const timeTable = await page.evaluate(() => {
+            const tables = document.querySelectorAll("table");
+            const timetableTable = tables[2]; 
+            if (!timetableTable) return null;
+            const rows = timetableTable.querySelectorAll("tbody tr");
+            const data = [];
+            for (let i = 1; i < rows.length; i++) 
+            { 
+              const cells = rows[i].querySelectorAll("td");
+              if (cells.length < 5) continue;
+
+              const code = cells[0].innerText.trim();
+              if (!code || code.toLowerCase() === 'na') continue;
+
+              data.push({
+                code,
+                description: cells[1].innerText.trim(),
+                section: cells[2].innerText.trim(),
+                faculty: cells[3].innerText.trim(),
+                venue: cells[4].innerText.trim(),
+              });
+            }
+          return data.length ? data : null;
+        });
+        
+        await docRef.set({
+            facultyList : timeTable,
+            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+          },{merge:true});
+          res.json({success: true,timeTable});
+      }
+      else
+      {
+        res.json({success: true,facultyList: doc.data().facultyList});
+      }
+  }
+  catch(error)
+  {
+    res.status(500).json({ success: false, message: "Failed to fetch faculty list", error: error.message });
+  }
+});
+
+// To fetch timetable
+app.post('/timetable', async  (req,res) => {
+    const { refresh } =  req.body;
+    try
+    {
+      //Storing timetable in Firestore
+      const regNo = await getRegNoFromPage(page);
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().timetable)
+      { 
+          await page.goto("https://webstream.sastra.edu/sastrapwi/academy/frmStudentTimetable.jsp");
+          const timeTable = await page.evaluate(() => {
+            const tables = document.querySelectorAll("table");
+            const timetableTable = tables[1]; 
+            if (!timetableTable) return null;
+            const rows = timetableTable.querySelectorAll("tbody tr");
+            const data = [];
+            for (let i = 2; i < rows.length; i++) 
+            { 
+              const cells = rows[i].querySelectorAll("td");
+              if (cells.length < 12) continue;
+              data.push({
+                day : cells[0].innerText.trim(),
+                "08:45 - 09:45" : cells[1].innerText.trim() || "N/A",
+                "09:45 - 10:45" : cells[2].innerText.trim() || "N/A",
+                "10:45 - 11:00" : "Break",
+                "11:00 - 12:00" : cells[3].innerText.trim() || "N/A",
+                "12:00 - 01:00" : cells[4].innerText.trim() || "N/A",
+                "01:00 - 02:00" : cells[5].innerText.trim() || "N/A",
+                "02:00 - 03:00" : cells[6].innerText.trim() || "N/A",
+                "03:00 - 03:15" : "Break",
+                "03:15 - 04:15" : cells[7].innerText.trim() || "N/A",
+                "04:15 - 05:15" : cells[8].innerText.trim() || "N/A",
+                "05:30 - 06:30" : cells[9].innerText.trim() || "N/A",
+                "06:30 - 07:30" : cells[10].innerText.trim() || "N/A",
+                "07:30 - 08:30" : cells[11].innerText.trim() || "N/A"
+              });
+            }
+          return data.length ? data : null;
+        });
+        
+        await docRef.set({
+            timetable : timeTable,
+            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+          },{merge:true});
+          res.json({success: true,timeTable});
+      }
+      else
+      {
+        res.json({success: true,timetable: doc.data().timetable});
+      }
+  }
+  catch(error)
+  {
+    res.status(500).json({ success: false, message: "Failed to fetch timetable", error: error.message });
+  }
 });
 
 // Chatbot
