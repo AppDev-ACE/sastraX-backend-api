@@ -287,32 +287,49 @@ app.post('/hostelDue',async (req,res) => {
 });
 
 //Subject - wise Attendance
-app.get('/subjectWiseAttendance',async (req,res) => {
+app.post('/subjectWiseAttendance',async (req,res) => {
+    const { refresh } = req.body;
     try
     {
-      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=7");
-      const subjectWiseAttendance = await page.evaluate(() => { 
-        const table = document.querySelector("table");
-        if (!table)
-            return "No records found";
-        const tbody = table.querySelector("tbody");
-        const rows = Array.from(tbody.getElementsByTagName("tr"));
-        const attendance = [];
-        for (const row of rows)
-        {
-          const columns = row.getElementsByTagName("td"); 
-          attendance.push({
-              code: columns[0]?.innerText?.trim(),
-              subject: columns[1]?.innerText?.trim(),
-              totalHrs: columns[2]?.innerText?.trim(),
-              presentHrs: columns[3]?.innerText?.trim(),
-              absentHrs: columns[4]?.innerText?.trim(),
-              percentage: columns[5]?.innerText?.trim()
-          });
-        }
-        return attendance;
-      });
-      res.json({ success: true, subjectWiseAttendance });
+      //Storing subject-wise attendance in Firestore
+      const regNo = await getRegNoFromPage(page);
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().subjectWiseAttendance)
+      {
+        await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=7");
+        const subjectWiseAttendance = await page.evaluate(() => { 
+          const table = document.querySelector("table");
+          if (!table)
+              return "No records found";
+          const tbody = table.querySelector("tbody");
+          const rows = Array.from(tbody.getElementsByTagName("tr"));
+          const attendance = [];
+          for (let i=2;i<rows.length-2;i++)
+          {
+            const columns = rows[i].getElementsByTagName("td"); 
+            attendance.push({
+                code: columns[0]?.innerText?.trim(),
+                subject: columns[1]?.innerText?.trim(),
+                totalHrs: columns[2]?.innerText?.trim(),
+                presentHrs: columns[3]?.innerText?.trim(),
+                absentHrs: columns[4]?.innerText?.trim(),
+                percentage: columns[5]?.innerText?.trim()
+            });
+          }
+          return attendance;
+        });
+        await docRef.set({
+          subjectAttendance : subjectWiseAttendance,
+          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        },{merge:true});
+        res.json({ success: true, subjectWiseAttendance });
+      }
+      else
+      {
+        res.json({ success: true, subjectAttendance: doc.data().subjectAttendance});
+      }
     }
     catch(error)
     {
