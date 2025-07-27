@@ -1,9 +1,10 @@
+require('dotenv').config();
 const express = require('express');
 const puppeteer = require('puppeteer');
 const path = require('path');
-const fs = require('fs');
 const cors = require('cors');
 const admin = require('firebase-admin');
+const cloudinary = require('cloudinary').v2;
 const serviceAccount = require('./serviceAccountKey.json');
 
 const app = express();
@@ -14,6 +15,13 @@ admin.initializeApp({
   credential : admin.credential.cert(serviceAccount)
 });
 const db = admin.firestore();
+
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
 
 let browser,page;
 
@@ -114,17 +122,48 @@ app.post('/profile', async (req, res) => {
 });
 
 // To fetch profile picture
-app.get('/profilePic', async(req, res) => {
-    await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
-    await page.waitForSelector('img[alt="Photo not found"]');
-    await new Promise(resolve => setTimeout(resolve, 1500));
+app.post('/profilePic', async(req, res) => {
+  const { refresh } = req.body;
+  try
+  {
+      //Storing data in Firestore
+      const registerNo = await getRegNoFromPage(page);
+      const docRef = db.collection("studentDetails").doc(registerNo);
+      const doc = await docRef.get();
+      if (!doc.exists || refresh || !doc.data().profilePic)
+      {
+        //If data not found in DB or if refreshed by user, scraping from SWI
+        await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
+        await page.waitForSelector('img[alt="Photo not found"]');
+        await new Promise(resolve => setTimeout(resolve, 1500));
 
-    const profilePath = path.join(__dirname, 'profile.png');
-    const profileElement = await page.$('img[alt="Photo not found"]');
-    await profileElement.screenshot({ path: profilePath });
+        const profilePath = path.join(__dirname, 'profile.png');
+        const profileElement = await page.$('img[alt="Photo not found"]');
+        await profileElement.screenshot({ path: profilePath });
 
-    res.sendFile(profilePath);
-})
+        res.sendFile(profilePath);
+
+        const result = await cloudinary.uploader.upload(profilePath, {
+          overwrite: true
+        });
+        const imageUrl = result.secure_url;
+        await docRef.set({
+          profilePic : imageUrl,
+          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        },{merge:true});
+        res.json({success: true,imageUrl});
+      }
+      else
+      {
+        res.json({success: true,profilePic: doc.data().profilePic});
+      }  
+  }
+  catch(error)
+  {
+    console.log(error);  
+    res.status(500).json({ success: false, error: "Failed to fetch profile picture"});
+  } 
+});
 
 // To fetch attendance
 app.post('/attendance',async (req,res) => {

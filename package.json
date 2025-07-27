@@ -6,7 +6,9 @@
     "start": "node captcha.js"
   },
   "dependencies": {
+    "cloudinary": "^2.7.0",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "firebase-admin": "^13.4.0",
     "puppeteer": "^24.11.1",
