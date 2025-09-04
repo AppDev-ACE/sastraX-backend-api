@@ -337,6 +337,50 @@ app.post('/subjectWiseAttendance',async (req,res) => {
     }
 });
 
+//To fetch no. of bunks
+app.get('/bunk', async (req,res) => {
+      try
+      {
+          const regNo = await getRegNoFromPage(page);
+          const docRef = db.collection("studentDetails").doc(regNo);
+          const doc = await docRef.get();
+
+
+          const coursecount = {};
+          const data = doc.data();
+          const timetable = data.timetable;
+
+          if(!doc.exists || !doc.data().timetable)
+          {
+            res.status(500).json({ success: false, message: "Failed to fetch bunk" });
+          } 
+
+          else
+          {
+
+            timetable.forEach(day => {
+              Object.keys(day).forEach(slot =>{
+                if(slot!= "day")
+                {
+                  const courses = day[slot].split(",").map(c => c.trim());
+                  courses.forEach(course =>{
+                    if(course != "N/A" && course != "Break" && course != "")
+                    {
+                      coursecount[course] = (coursecount[course] || 0) + 1;
+                    }
+                  });
+                }
+              });
+            });
+            res.json({success:true, bunkdata:coursecount})
+          }
+      }
+      catch(error)
+      {
+        res.status(500).json({ success: false, message: "Failed to fetch bunk", error: error.message });
+      }
+});
+
 // To fetch semester-wise grades & credits
 app.post('/semGrades', async (req,res) => {
     const { refresh } = req.body;
@@ -922,7 +966,6 @@ app.post('/chatbot', async(req,res) => {
 // To fetch depatment-wise PYQs
 app.get('/pyq', async(req,res) => {
     return res.json([
-
       {
         dept : "cse-aids",
         url : "https://drive.google.com/drive/folders/1_HOFZaJmBZOP43EShPrnPcrqMYMn3kTO"
