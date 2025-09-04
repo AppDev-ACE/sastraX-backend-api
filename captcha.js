@@ -679,6 +679,55 @@ app.post('/facultyList', async  (req,res) => {
   }
 });
 
+//To fetch the credits of current semester
+app.post('/currentSemCredits',async (req,res) => {
+    const { refresh } = req.body;
+    try
+    {
+        //Storing the credits in firestore
+        const regNo = await getRegNoFromPage(page);
+        const docRef = db.collection("studentDetails").doc(regNo);
+        const doc = await docRef.get();
+
+        if (!doc.exists || refresh || !doc.data().credits)
+        {
+            await page.goto("https://webstream.sastra.edu/sastrapwi/academy/StudentCourseRegistrationView.jsp");
+            const credits = await page.evaluate(() => {
+              const table = document.querySelector("table");
+              if (!table)
+                return "No records Found";
+              const tbody = table.querySelector("tbody");
+              const rows = Array.from(tbody.getElementsByTagName("tr"));
+              const credit = [];
+              for (let i=4;i<rows.length;i++)
+              {
+                const coloumns = rows[i].getElementsByTagName("td");
+                credit.push({
+                  courseCode : coloumns[0]?.innerText.trim(),
+                  courseName : coloumns[1]?.innerText.trim(),
+                  credit : coloumns[5]?.innerText.trim()
+                });
+              }
+              return credit;
+            });
+
+            docRef.set({
+              credits : credits,
+              lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+            },{merge:true});
+            res.json({ success: true,credits})
+        }
+        else
+        {
+            res.json({ success: true,credits: doc.data().credits});
+        }
+    }
+    catch(error)
+    {
+      res.status(500).json({ status: false, message: "Failed to fetch credits", error: error.meassage });
+    }
+});
+
 // To fetch timetable
 app.post('/timetable', async  (req,res) => {
     const { refresh } =  req.body;

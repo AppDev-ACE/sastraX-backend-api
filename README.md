@@ -9,6 +9,7 @@ API Endpoints:
  - /sastraDue: To fetch the total SASTRA fee due (POST)
  - /hostelDue: To fetch the total Hostel fee due (POST)
  - /subjectWiseAttendance: To fetch subject-wise attendance (POST)
+ - /currentSemCredits: To fetch the credits of current semester courses (POST) 
  - /bunk: To calculate bunks (GET)
  - /semGrades: To fetch semester-wise grades and credits (POST)
  - /studentStatus: To fetch student status - Hosteler/Dayschloar (POST)
