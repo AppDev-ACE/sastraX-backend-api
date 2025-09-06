@@ -23,33 +23,53 @@ cloudinary.config({
 });
 
 
-let browser,page;
+let browser;
+(async () => {
+  browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'] //to host publicly
+  });
+  console.log("Puppeteer launched, starting server...");
+  app.listen(3000, () => console.log("Server running on port 3000"));
+})();
 
-// To provide captcha to the UI
-app.get('/captcha', async (req, res) => {
+// Store sessions in memory
+const userSessions = {};
+const pendingCaptcha = {};
 
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'] //to host publicly
-    });
+app.post('/captcha', async (req, res) => {
+  if (!browser) return res.status(503).json({ success: false, message: "Browser not ready" });
 
-    page = await browser.newPage();
+  const { regNo } = req.body;
+  const context = await browser.createBrowserContext(); // safe for Puppeteer v24
+  const page = await context.newPage();
+
+  try {
     await page.goto("https://webstream.sastra.edu/sastrapwi/");
-    await new Promise(resolve => setTimeout(resolve, 1500));
     await page.waitForSelector('#imgCaptcha', { timeout: 5000 });
 
     const captchaPath = path.join(__dirname, 'captcha.png');
     const captchaElement = await page.$('#imgCaptcha');
     await captchaElement.screenshot({ path: captchaPath });
 
+    pendingCaptcha[regNo] = { page, context }; // store in memory only
     res.sendFile(captchaPath);
+  } catch(err) {
+    await context.close().catch(() => {});
+    res.status(500).json({ success: false, message: "Failed to get captcha", error: err?.message || String(err) });
+  }
 });
 
-// To get the reg no, password and captcha from the user and login
 app.post('/login', async (req, res) => {
-  const { regno, pwd, captcha } = req.body;
+  const { regNo, pwd, captcha } = req.body;
+  const session = pendingCaptcha[regNo];
 
-    await page.type("#txtRegNumber", regno);
+  if (!session) return res.status(400).json({ success: false, message: "Captcha session expired or not found" });
+
+  const { page, context } = session;
+
+  try {
+    await page.type("#txtRegNumber", regNo);
     await page.type("#txtPwd", pwd);
     await page.type("#answer", captcha);
 
@@ -60,31 +80,37 @@ app.post('/login', async (req, res) => {
 
     const loginFailed = await page.$('.ui-state-error');
     if (loginFailed) {
-      const msg = await page.evaluate(el => el.textContent.trim(), loginFailed);
-      await browser.close();
+      const msg = await page.evaluate(el => (el.textContent || "Login failed").trim(), loginFailed);
+      await context.close().catch(() => {});
       return res.status(401).json({ success: false, message: msg });
     }
 
+    userSessions["Register No. "+regNo] = { context }; // only store context
     return res.json({ success: true, message: "Login successful!" });
-});
 
-async function getRegNoFromPage(page) {
-  return await page.evaluate(() => {
-    return document.querySelectorAll('.profile-text')[0]?.innerText.trim();
-  });
-}
+  } catch(err) {
+    await context.close().catch(() => {});
+    return res.status(500).json({ success: false, message: "Login failed", error: err?.message || String(err) });
+  } finally {
+    delete pendingCaptcha[regNo];
+  }
+});
 
 // To fetch profile details
 app.post('/profile', async (req, res) => {
-    const { refresh } = req.body;
+    let { regNo,refresh } = req.body;
+    regNo = "Register No. "+regNo;
+    const session = userSessions[regNo];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const page = await session.context.newPage();
     try
     {
       await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
       await page.waitForSelector('img[alt="Photo not found"]');
 
       //Storing data in Firestore
-      const registerNo = await getRegNoFromPage(page);
-      const docRef = db.collection("studentDetails").doc(registerNo);
+      const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
       if (!doc.exists || refresh || !doc.data().profile)
       {
@@ -117,18 +143,25 @@ app.post('/profile', async (req, res) => {
     }
     catch (error)
     {
-      res.status(500).json({ success: false, error: "Server error" });
+      res.status(500).json({ success: false, error: error.message });
+    }
+    finally{
+      await page.close();
     }
 });
 
 // To fetch profile picture
 app.post('/profilePic', async(req, res) => {
-  const { refresh } = req.body;
+  let { regNo,refresh } = req.body;
+  regNo = "Register No. "+regNo;
+  const session = userSessions[regNo];
+  if (!session) 
+    return res.status(401).json({ success: false, message: "User not logged in" });
+  const page = await session.context.newPage();
   try
   {
       //Storing data in Firestore
-      const registerNo = await getRegNoFromPage(page);
-      const docRef = db.collection("studentDetails").doc(registerNo);
+      const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
       if (!doc.exists || refresh || !doc.data().profilePic)
       {
@@ -162,16 +195,23 @@ app.post('/profilePic', async(req, res) => {
   {
     console.log(error);  
     res.status(500).json({ success: false, error: "Failed to fetch profile picture"});
+  }
+  finally{
+    await page.close();
   } 
 });
 
 // To fetch attendance
 app.post('/attendance',async (req,res) => {
-    const { refresh } = req.body;
+    let { regNo,refresh } = req.body;
+    regNo = "Register No. "+regNo;
+    const session = userSessions[regNo];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const page = await session.context.newPage();
     try
     {
       //Storing attendance in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -194,17 +234,24 @@ app.post('/attendance',async (req,res) => {
     }
     catch(error)
     {
-      res.status(500).json({ success: false, message: "Failed to fetch attendance" });
+      res.status(500).json({ success: false, message: "Failed to fetch attendance",error: error.message });
     }
+    finally{
+      await page.close();
+    } 
 });
 
 // To fetch SASTRA due
 app.post('/sastraDue',async (req,res) => {
-    const { refresh } = req.body;
+    let { regNo,refresh } = req.body;
+    regNo = "Register No. "+regNo;
+    const session = userSessions[regNo];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const page = await session.context.newPage();
     try
     {
       //Storing sastra due in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -240,15 +287,22 @@ app.post('/sastraDue',async (req,res) => {
     {
       res.status(500).json({ success: false, message: "Failed to fetch due amount", error: error.message });
     }
+    finally{
+      await page.close();
+    }
 });
 
 // To fetch Hostel due
 app.post('/hostelDue',async (req,res) => {
-    const { refresh } = req.body;
+    let { regNo,refresh } = req.body;
+    regNo = "Register No. "+regNo;
+    const session = userSessions[regNo];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const page = await session.context.newPage();
     try
     {
       //Storing hostel due in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -284,15 +338,22 @@ app.post('/hostelDue',async (req,res) => {
     {
       res.status(500).json({ success: false, message: "Failed to fetch due amount", error: error.message });
     }
+    finally{
+      await page.close();
+    }
 });
 
 //Subject - wise Attendance
 app.post('/subjectWiseAttendance',async (req,res) => {
-    const { refresh } = req.body;
+    let { regNo,refresh } = req.body;
+    regNo = "Register No. "+regNo;
+    const session = userSessions[regNo];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const page = await session.context.newPage();
     try
     {
       //Storing subject-wise attendance in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -335,16 +396,23 @@ app.post('/subjectWiseAttendance',async (req,res) => {
     {
       res.status(500).json({ success: false, message: "Failed to fetch attendance", error: error.message });
     }
+    finally{
+      await page.close();
+    }
 });
 
 //To fetch no. of bunks
-app.get('/bunk', async (req,res) => {
+app.post('/bunk', async (req,res) => {
+  let { regNo } = req.body;
+  regNo = "Register No. "+regNo;
+  const session = userSessions[regNo];
+  if (!session) 
+    return res.status(401).json({ success: false, message: "User not logged in" });
+  const page = await session.context.newPage();
       try
       {
-          const regNo = await getRegNoFromPage(page);
           const docRef = db.collection("studentDetails").doc(regNo);
           const doc = await docRef.get();
-
 
           const coursecount = {};
           const data = doc.data();
@@ -352,9 +420,8 @@ app.get('/bunk', async (req,res) => {
 
           if(!doc.exists || !doc.data().timetable)
           {
-            res.status(500).json({ success: false, message: "Failed to fetch bunk" });
-          } 
-
+            return res.status(500).json({ success: false, message: "Failed to fetch bunk" });
+          }
           else
           {
 
@@ -383,11 +450,15 @@ app.get('/bunk', async (req,res) => {
 
 // To fetch semester-wise grades & credits
 app.post('/semGrades', async (req,res) => {
-    const { refresh } = req.body;
+    let { regNo,refresh } = req.body;
+    regNo = "Register No. "+regNo;
+    const session = userSessions[regNo];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const page = await session.context.newPage();
     try
     {
       //Storing sem-wise grades in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -431,15 +502,22 @@ app.post('/semGrades', async (req,res) => {
     {
       res.status(500).json({ sucess:false, message: "Failed to fetch sem-wise grades", error: error.message });
     }
+    finally{
+      await page.close();
+    }
 });
 
 //To fetch status of student (Hosteler/Dayscholar)
 app.post('/studentStatus', async(req,res) => {
-    const { refresh } = req.body;
+    let { regNo,refresh } = req.body;
+    regNo = "Register No. "+regNo;
+    const session = userSessions[regNo];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const page = await session.context.newPage();
     try
     {
       //Storing student status in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -481,15 +559,22 @@ app.post('/studentStatus', async(req,res) => {
     {
       res.status(500).json({ sucess:false, message: "Failed to fetch student status", error: error.message });
     }
+    finally{
+      await page.close();
+    }
 });
 
 // To fetch each sem SGPA
 app.post('/sgpa', async(req,res) => {
-    const { refresh } = req.body;
+    let { regNo,refresh } = req.body;
+    regNo = "Register No. "+regNo;
+    const session = userSessions[regNo];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const page = await session.context.newPage();
     try
     {
       //Storing SGPA in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -528,15 +613,22 @@ app.post('/sgpa', async(req,res) => {
     {
       res.status(500).json({ success: false, meassage: "Failed to fetch SGPA", error: error.meassage });
     }
+    finally{
+      await page.close();
+    }
 });
 
 // To fetch overall CGPA
 app.post('/cgpa', async(req,res) => {
-    const { refresh } = req.body;
+    let { regNo,refresh } = req.body;
+    regNo = "Register No. "+regNo;
+    const session = userSessions[regNo];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const page = await session.context.newPage();
     try
     {
       //Storing CGPA in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -577,15 +669,22 @@ app.post('/cgpa', async(req,res) => {
     {
       res.status(500).json({ success: false, meassage: "Failed to fetch CGPA", error: error.meassage });
     }
+    finally{
+      await page.close();
+    }
 });
 
 // To fetch DOB
 app.post('/dob', async(req,res) => {
-    const { refresh } = req.body;
+    let { regNo,refresh } = req.body;
+    regNo = "Register No. "+regNo;
+    const session = userSessions[regNo];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const page = await session.context.newPage();
     try
     {
       //Storing DOB grades in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -622,15 +721,22 @@ app.post('/dob', async(req,res) => {
     {
       res.status(500).json({ sucess:false, message: "Failed to fetch DOB", error: error.message });
     }
+    finally{
+      await page.close();
+    }
 });
 
 // To fetch faculty list
 app.post('/facultyList', async  (req,res) => {
-    const { refresh } =  req.body;
+    let { regNo,refresh } =  req.body;
+    regNo = "Register No. "+regNo;
+    const session = userSessions[regNo];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const page = await session.context.newPage();
     try
     {
       //Storing faculty list in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -677,15 +783,22 @@ app.post('/facultyList', async  (req,res) => {
   {
     res.status(500).json({ success: false, message: "Failed to fetch faculty list", error: error.message });
   }
+  finally{
+    await page.close();
+  }
 });
 
 //To fetch the credits of current semester
 app.post('/currentSemCredits',async (req,res) => {
-    const { refresh } = req.body;
+    let { regNo,refresh } = req.body;
+    regNo = "Register No. "+regNo;
+    const session = userSessions[regNo];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const page = await session.context.newPage();
     try
     {
         //Storing the credits in firestore
-        const regNo = await getRegNoFromPage(page);
         const docRef = db.collection("studentDetails").doc(regNo);
         const doc = await docRef.get();
 
@@ -726,15 +839,22 @@ app.post('/currentSemCredits',async (req,res) => {
     {
       res.status(500).json({ status: false, message: "Failed to fetch credits", error: error.meassage });
     }
+    finally{
+      await page.close();
+    }
 });
 
 // To fetch timetable
 app.post('/timetable', async  (req,res) => {
-    const { refresh } =  req.body;
+    let { regNo,refresh } =  req.body;
+    regNo = "Register No. "+regNo;
+    const session = userSessions[regNo];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const page = await session.context.newPage();
     try
     {
       //Storing timetable in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -785,6 +905,9 @@ app.post('/timetable', async  (req,res) => {
   catch(error)
   {
     res.status(500).json({ success: false, message: "Failed to fetch timetable", error: error.message });
+  }
+  finally{
+    await page.close();
   }
 });
 
