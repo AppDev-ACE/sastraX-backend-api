@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const puppeteer = require('puppeteer');
+const { v4: uuidv4 } = require('uuid'); 
 const path = require('path');
 const cors = require('cors');
 const admin = require('firebase-admin');
@@ -23,33 +24,57 @@ cloudinary.config({
 });
 
 
-let browser,page;
+let browser;
+(async () => {
+  browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'] //to host publicly
+  });
+  console.log("Puppeteer launched, starting server...");
+  app.listen(3000, () => console.log("Server running on port 3000"));
+})();
 
-// To provide captcha to the UI
-app.get('/captcha', async (req, res) => {
+// Store sessions in memory
+const userSessions = {};
+const pendingCaptcha = {};
 
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'] //to host publicly
-    });
+app.post('/captcha', async (req, res) => {
+  if (!browser) 
+    return res.status(503).json({ success: false, message: "Browser not ready" });
 
-    page = await browser.newPage();
-    await page.goto("https://webstream.sastra.edu/sastrapwi/");
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    await page.waitForSelector('#imgCaptcha', { timeout: 5000 });
+  const { regNo } = req.body;
+  const context = await browser.createBrowserContext();
+  const page = await context.newPage();
+
+  try {
+    await page.goto("https://webstream.sastra.edu/sastrapwi/",{ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => {
+      const img = document.querySelector('#imgCaptcha');
+      return img && img.complete && img.naturalWidth > 0;
+    }, { timeout: 15000 });
 
     const captchaPath = path.join(__dirname, 'captcha.png');
     const captchaElement = await page.$('#imgCaptcha');
     await captchaElement.screenshot({ path: captchaPath });
 
+    pendingCaptcha[regNo] = { page, context };
     res.sendFile(captchaPath);
+  } catch(err) {
+    await context.close().catch(() => {});
+    res.status(500).json({ success: false, message: "Failed to get captcha", error: err?.message || String(err) });
+  }
 });
 
-// To get the reg no, password and captcha from the user and login
 app.post('/login', async (req, res) => {
-  const { regno, pwd, captcha } = req.body;
+  const { regNo, pwd, captcha } = req.body;
+  const session = pendingCaptcha[regNo];
 
-    await page.type("#txtRegNumber", regno);
+  if (!session) return res.status(400).json({ success: false, message: "Captcha session expired or not found" });
+
+  const { page, context } = session;
+
+  try {
+    await page.type("#txtRegNumber", regNo);
     await page.type("#txtPwd", pwd);
     await page.type("#answer", captcha);
 
@@ -60,31 +85,64 @@ app.post('/login', async (req, res) => {
 
     const loginFailed = await page.$('.ui-state-error');
     if (loginFailed) {
-      const msg = await page.evaluate(el => el.textContent.trim(), loginFailed);
-      await browser.close();
+      const msg = await page.evaluate(el => (el.textContent || "Login failed").trim(), loginFailed);
+      await context.close().catch(() => {});
       return res.status(401).json({ success: false, message: msg });
     }
 
-    return res.json({ success: true, message: "Login successful!" });
+    const token = uuidv4();
+    userSessions[token] = { regNo, context };
+    await db.collection("activeSessions").doc(token).set({
+        regNo,
+        createdAt: new Date().toISOString()
+    });
+    return res.json({ success: true, message: "Login successful!", token });
+
+  } 
+  catch(err) 
+  {
+    await context.close().catch(() => {});
+    return res.status(500).json({ success: false, message: "Login failed", error: err?.message || String(err) });
+  } 
+  finally 
+  {
+    delete pendingCaptcha[regNo];
+  }
 });
 
-async function getRegNoFromPage(page) {
-  return await page.evaluate(() => {
-    return document.querySelectorAll('.profile-text')[0]?.innerText.trim();
-  });
-}
+//To logout an user
+app.post('/logout',async(req,res) => {
+    let { token } = req.body;
+    const session = userSessions[token];
+    
+    if (!session){
+      delete userSessions[token];
+      await db.collection("activeSessions").doc(token).delete();
+      return res.json({success: true,message: "Already logged out!"});
+    }
+
+    await session.context.close().catch(() => {});
+    delete userSessions[token];
+    await db.collection("activeSessions").doc(token).delete();
+
+    return res.json({success:true, message:"Logged out successfully"});
+});
 
 // To fetch profile details
 app.post('/profile', async (req, res) => {
-    const { refresh } = req.body;
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
     try
     {
       await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
       await page.waitForSelector('img[alt="Photo not found"]');
 
       //Storing data in Firestore
-      const registerNo = await getRegNoFromPage(page);
-      const docRef = db.collection("studentDetails").doc(registerNo);
+      const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
       if (!doc.exists || refresh || !doc.data().profile)
       {
@@ -117,18 +175,25 @@ app.post('/profile', async (req, res) => {
     }
     catch (error)
     {
-      res.status(500).json({ success: false, error: "Server error" });
+      res.status(500).json({ success: false, error: error.message });
+    }
+    finally{
+      await page.close();
     }
 });
 
 // To fetch profile picture
 app.post('/profilePic', async(req, res) => {
-  const { refresh } = req.body;
+  let { token,refresh } = req.body;
+  const session = userSessions[token];
+  if (!session) 
+    return res.status(401).json({ success: false, message: "User not logged in" });
+  const { regNo, context } = session;
+  const page = await context.newPage();
   try
   {
       //Storing data in Firestore
-      const registerNo = await getRegNoFromPage(page);
-      const docRef = db.collection("studentDetails").doc(registerNo);
+      const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
       if (!doc.exists || refresh || !doc.data().profilePic)
       {
@@ -162,16 +227,23 @@ app.post('/profilePic', async(req, res) => {
   {
     console.log(error);  
     res.status(500).json({ success: false, error: "Failed to fetch profile picture"});
+  }
+  finally{
+    await page.close();
   } 
 });
 
 // To fetch attendance
 app.post('/attendance',async (req,res) => {
-    const { refresh } = req.body;
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
     try
     {
       //Storing attendance in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -194,17 +266,24 @@ app.post('/attendance',async (req,res) => {
     }
     catch(error)
     {
-      res.status(500).json({ success: false, message: "Failed to fetch attendance" });
+      res.status(500).json({ success: false, message: "Failed to fetch attendance",error: error.message });
     }
+    finally{
+      await page.close();
+    } 
 });
 
 // To fetch SASTRA due
 app.post('/sastraDue',async (req,res) => {
-    const { refresh } = req.body;
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
     try
     {
       //Storing sastra due in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -240,15 +319,22 @@ app.post('/sastraDue',async (req,res) => {
     {
       res.status(500).json({ success: false, message: "Failed to fetch due amount", error: error.message });
     }
+    finally{
+      await page.close();
+    }
 });
 
 // To fetch Hostel due
 app.post('/hostelDue',async (req,res) => {
-    const { refresh } = req.body;
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
     try
     {
       //Storing hostel due in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -284,15 +370,22 @@ app.post('/hostelDue',async (req,res) => {
     {
       res.status(500).json({ success: false, message: "Failed to fetch due amount", error: error.message });
     }
+    finally{
+      await page.close();
+    }
 });
 
 //Subject - wise Attendance
 app.post('/subjectWiseAttendance',async (req,res) => {
-    const { refresh } = req.body;
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
     try
     {
       //Storing subject-wise attendance in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -335,59 +428,22 @@ app.post('/subjectWiseAttendance',async (req,res) => {
     {
       res.status(500).json({ success: false, message: "Failed to fetch attendance", error: error.message });
     }
-});
-
-//To fetch no. of bunks
-app.get('/bunk', async (req,res) => {
-      try
-      {
-          const regNo = await getRegNoFromPage(page);
-          const docRef = db.collection("studentDetails").doc(regNo);
-          const doc = await docRef.get();
-
-
-          const coursecount = {};
-          const data = doc.data();
-          const timetable = data.timetable;
-
-          if(!doc.exists || !doc.data().timetable)
-          {
-            res.status(500).json({ success: false, message: "Failed to fetch bunk" });
-          } 
-
-          else
-          {
-
-            timetable.forEach(day => {
-              Object.keys(day).forEach(slot =>{
-                if(slot!= "day")
-                {
-                  const courses = day[slot].split(",").map(c => c.trim());
-                  courses.forEach(course =>{
-                    if(course != "N/A" && course != "Break" && course != "")
-                    {
-                      coursecount[course] = (coursecount[course] || 0) + 1;
-                    }
-                  });
-                }
-              });
-            });
-            res.json({success:true, bunkdata:coursecount})
-          }
-      }
-      catch(error)
-      {
-        res.status(500).json({ success: false, message: "Failed to fetch bunk", error: error.message });
-      }
+    finally{
+      await page.close();
+    }
 });
 
 // To fetch semester-wise grades & credits
 app.post('/semGrades', async (req,res) => {
-    const { refresh } = req.body;
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
     try
     {
       //Storing sem-wise grades in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -431,15 +487,22 @@ app.post('/semGrades', async (req,res) => {
     {
       res.status(500).json({ sucess:false, message: "Failed to fetch sem-wise grades", error: error.message });
     }
+    finally{
+      await page.close();
+    }
 });
 
 //To fetch status of student (Hosteler/Dayscholar)
 app.post('/studentStatus', async(req,res) => {
-    const { refresh } = req.body;
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
     try
     {
       //Storing student status in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -481,15 +544,22 @@ app.post('/studentStatus', async(req,res) => {
     {
       res.status(500).json({ sucess:false, message: "Failed to fetch student status", error: error.message });
     }
+    finally{
+      await page.close();
+    }
 });
 
 // To fetch each sem SGPA
 app.post('/sgpa', async(req,res) => {
-    const { refresh } = req.body;
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
     try
     {
       //Storing SGPA in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -528,15 +598,22 @@ app.post('/sgpa', async(req,res) => {
     {
       res.status(500).json({ success: false, meassage: "Failed to fetch SGPA", error: error.meassage });
     }
+    finally{
+      await page.close();
+    }
 });
 
 // To fetch overall CGPA
 app.post('/cgpa', async(req,res) => {
-    const { refresh } = req.body;
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
     try
     {
       //Storing CGPA in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -577,15 +654,22 @@ app.post('/cgpa', async(req,res) => {
     {
       res.status(500).json({ success: false, meassage: "Failed to fetch CGPA", error: error.meassage });
     }
+    finally{
+      await page.close();
+    }
 });
 
 // To fetch DOB
 app.post('/dob', async(req,res) => {
-    const { refresh } = req.body;
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
     try
     {
       //Storing DOB grades in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -622,15 +706,22 @@ app.post('/dob', async(req,res) => {
     {
       res.status(500).json({ sucess:false, message: "Failed to fetch DOB", error: error.message });
     }
+    finally{
+      await page.close();
+    }
 });
 
 // To fetch faculty list
 app.post('/facultyList', async  (req,res) => {
-    const { refresh } =  req.body;
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
     try
     {
       //Storing faculty list in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -677,15 +768,22 @@ app.post('/facultyList', async  (req,res) => {
   {
     res.status(500).json({ success: false, message: "Failed to fetch faculty list", error: error.message });
   }
+  finally{
+    await page.close();
+  }
 });
 
 //To fetch the credits of current semester
 app.post('/currentSemCredits',async (req,res) => {
-    const { refresh } = req.body;
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
     try
     {
         //Storing the credits in firestore
-        const regNo = await getRegNoFromPage(page);
         const docRef = db.collection("studentDetails").doc(regNo);
         const doc = await docRef.get();
 
@@ -726,15 +824,22 @@ app.post('/currentSemCredits',async (req,res) => {
     {
       res.status(500).json({ status: false, message: "Failed to fetch credits", error: error.meassage });
     }
+    finally{
+      await page.close();
+    }
 });
 
 // To fetch timetable
 app.post('/timetable', async  (req,res) => {
-    const { refresh } =  req.body;
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
     try
     {
       //Storing timetable in Firestore
-      const regNo = await getRegNoFromPage(page);
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
@@ -785,6 +890,163 @@ app.post('/timetable', async  (req,res) => {
   catch(error)
   {
     res.status(500).json({ success: false, message: "Failed to fetch timetable", error: error.message });
+  }
+  finally{
+    await page.close();
+  }
+});
+
+// To fetch timetable for bunk (trim)
+app.post('/timetableBunk', async  (req,res) => {
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
+    try
+    {
+      //Storing timetable in Firestore
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().timetable)
+      { 
+          await page.goto("https://webstream.sastra.edu/sastrapwi/academy/frmStudentTimetable.jsp");
+          const timeTable = await page.evaluate(() => {
+            const tables = document.querySelectorAll("table");
+            const timetableTable = tables[1]; 
+            if (!timetableTable) return null;
+            const rows = timetableTable.querySelectorAll("tbody tr");
+            const data = [];
+
+            const cleanCell = (cell) => {
+            const text = cell.innerText.trim();
+            return text ? text.split(",")[0].trim() : "N/A";
+            }
+
+            for (let i = 2; i < rows.length; i++) 
+            { 
+              const cells = rows[i].querySelectorAll("td");
+              if (cells.length < 12) continue;
+              data.push({
+                day : cells[0].innerText.trim(),
+                "08:45 - 09:45" : cleanCell(cells[1]),
+                "09:45 - 10:45" : cleanCell(cells[2]),
+                "10:45 - 11:00" : "Break",
+                "11:00 - 12:00" : cleanCell(cells[3]),
+                "12:00 - 01:00" : cleanCell(cells[4]),
+                "01:00 - 02:00" : cleanCell(cells[5]),
+                "02:00 - 03:00" : cleanCell(cells[6]),
+                "03:00 - 03:15" : "Break",
+                "03:15 - 04:15" : cleanCell(cells[7]),
+                "04:15 - 05:15" : cleanCell(cells[8]),
+                "05:30 - 06:30" : cleanCell(cells[9]),
+                "06:30 - 07:30" : cleanCell(cells[10]),
+                "07:30 - 08:30" : cleanCell(cells[11])
+              });
+
+            }
+          return data.length ? data : null;
+        });
+        
+        await docRef.set({
+            timetable : timeTable,
+            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+          },{merge:true});
+          res.json({success: true,timeTable});
+      }
+      else
+      {
+        res.json({success: true,timetable: doc.data().timetable});
+      }
+  }
+  catch(error)
+  {
+    res.status(500).json({ success: false, message: "Failed to fetch timetable", error: error.message });
+  }
+  finally{
+    await page.close();
+  }
+});
+
+const daysPerSem = {
+  Mon: 15,
+  Tue: 15,
+  Wed: 16,
+  Thu: 15,
+  Fri: 15,
+  Sat: 0,
+  Sun: 0
+};
+
+//To fetch no. of bunks
+app.post('/bunk', async (req, res) => {
+  let { regNo } = req.body;
+  regNo = "Register No. " + regNo;
+
+  try {
+    const docRef = db.collection("studentDetails").doc(regNo);
+    const doc = await docRef.get();
+
+    if (!doc.exists || !doc.data().timetable) {
+      return res.status(500).json({ success: false, message: "Failed to fetch bunk" });
+    }
+
+    const data = doc.data();
+    const timetable = data.timetable;
+
+    const perDay = {};
+    const perSem = {};
+    const total = {};
+
+    timetable.forEach(day => {
+      const dayName = day.day;
+      perDay[dayName] = {};
+
+      Object.keys(day).forEach(slot => {
+        if (slot !== "day") {
+          const courses = day[slot].split(",").map(c => c.trim());
+          courses.forEach(course => {
+            if (course !== "N/A" && course !== "Break" && course !== "") {
+              // per-day count
+              perDay[dayName][course] = (perDay[dayName][course] || 0) + 1;
+
+              // total weekly
+              total[course] = (total[course] || 0) + 1;
+            }
+          });
+        }
+      });
+    });
+
+    // now compute perYear using daysPerYear
+    Object.keys(perDay).forEach(day => {
+      Object.keys(perDay[day]).forEach(course => {
+        const yearly = perDay[day][course] * (daysPerSem[day] || 0);
+        perSem[course] = (perSem[course] || 0) + yearly;
+      });
+    });
+
+    const perSem20 = {};
+    Object.keys(perSem).forEach(course => {
+      perSem20[course] = Math.floor(perSem[course] * 0.20); // floor/round as needed
+    });
+
+    
+    res.json({
+      success: true,
+      bunkdata: {
+        perDay,
+        totalWeekly: total,
+        perSem,
+        perSem20
+      }
+   
+});
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to fetch bunk", error: error.message });
   }
 });
 

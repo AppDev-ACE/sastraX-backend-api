@@ -10,7 +10,7 @@ API Endpoints:
  - /hostelDue: To fetch the total Hostel fee due (POST)
  - /subjectWiseAttendance: To fetch subject-wise attendance (POST)
  - /currentSemCredits: To fetch the credits of current semester courses (POST) 
- - /bunk: To calculate bunks (GET)
+ - /bunk: To calculate bunks (POST)
  - /semGrades: To fetch semester-wise grades and credits (POST)
  - /studentStatus: To fetch student status - Hosteler/Dayschloar (POST)
  - /sgpa: To fetch SGPA sem-wise (POST)
