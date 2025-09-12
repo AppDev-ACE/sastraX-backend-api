@@ -6,7 +6,8 @@ const path = require('path');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const cloudinary = require('cloudinary').v2;
-const serviceAccount = require('./serviceAccountKey.json');
+const serviceAccountPath = path.join(__dirname, 'serviceAccountKey.json');
+const serviceAccount = require(serviceAccountPath);
 
 const app = express();
 app.use(cors());
@@ -38,6 +39,14 @@ let browser;
 const userSessions = {};
 const pendingCaptcha = {};
 
+
+
+
+
+// This route generates and returns the SASTRA portal captcha image by launching a new browser context,
+// navigating to the login page, waiting for the captcha to load, taking a screenshot, storing the
+// session (page + context) mapped to the user's regNo, and sending the image back as the response.
+
 app.post('/captcha', async (req, res) => {
   if (!browser) 
     return res.status(503).json({ success: false, message: "Browser not ready" });
@@ -64,6 +73,16 @@ app.post('/captcha', async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to get captcha", error: err?.message || String(err) });
   }
 });
+
+
+
+
+
+// This route handles login by reusing the stored captcha session (page + context), 
+// filling in the regNo, password, and captcha, submitting the form, 
+// checking for login errors, and if successful, creating a session token, 
+// storing it in memory and Firestore, then returning the token to the client. 
+// It also cleans up the captcha session afterward.
 
 app.post('/login', async (req, res) => {
   const { regNo, pwd, captcha } = req.body;
@@ -110,7 +129,14 @@ app.post('/login', async (req, res) => {
   }
 });
 
-//To logout an user
+
+
+
+
+// This route logs out a user by closing their browser context, 
+// removing the session from memory and Firestore, and 
+// returning a logout success message (or "Already logged out" if no session exists).
+
 app.post('/logout',async(req,res) => {
     let { token } = req.body;
     const session = userSessions[token];
@@ -128,7 +154,16 @@ app.post('/logout',async(req,res) => {
     return res.json({success:true, message:"Logged out successfully"});
 });
 
-// To fetch profile details
+
+
+
+
+
+// This route fetches a student's profile using their session token. 
+// If the profile is missing in Firestore or a refresh is requested, it scrapes the data 
+// (name, regNo, department, semester) from the SASTRA portal, stores/updates it in Firestore, 
+// and returns it. Otherwise, it serves the cached profile from Firestore.
+
 app.post('/profile', async (req, res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -182,7 +217,16 @@ app.post('/profile', async (req, res) => {
     }
 });
 
-// To fetch profile picture
+
+
+
+
+
+// This route fetches a student's profile picture using their session token. 
+// If not found in Firestore or if refresh is requested, it scrapes the image 
+// from the SASTRA portal, saves a temporary screenshot, uploads it to Cloudinary, 
+// stores the URL in Firestore, and returns it. Otherwise, it serves the cached image URL.
+
 app.post('/profilePic', async(req, res) => {
   let { token,refresh } = req.body;
   const session = userSessions[token];
@@ -233,7 +277,16 @@ app.post('/profilePic', async(req, res) => {
   } 
 });
 
-// To fetch attendance
+
+
+
+
+
+// This route fetches a student's attendance using their session token. 
+// If attendance is missing in Firestore or refresh is requested, it scrapes the data 
+// from the SASTRA portal, stores/updates it in Firestore, and returns it. 
+// Otherwise, it serves the cached attendance from Firestore.
+
 app.post('/attendance',async (req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -273,7 +326,16 @@ app.post('/attendance',async (req,res) => {
     } 
 });
 
-// To fetch SASTRA due
+
+
+
+
+
+// This route fetches a student's SASTRA fee due using their session token. 
+// If the due amount is missing in Firestore or refresh is requested, it scrapes the value 
+// from the fee due page, stores/updates it in Firestore, and returns it. 
+// Otherwise, it serves the cached due amount from Firestore.
+
 app.post('/sastraDue',async (req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -324,7 +386,16 @@ app.post('/sastraDue',async (req,res) => {
     }
 });
 
-// To fetch Hostel due
+
+
+
+
+
+// This route fetches a student's hostel fee due using their session token. 
+// If the due amount is missing in Firestore or refresh is requested, it scrapes the value 
+// from the hostel fee due page, stores/updates it in Firestore, and returns it. 
+// Otherwise, it serves the cached due amount from Firestore.
+
 app.post('/hostelDue',async (req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -375,7 +446,16 @@ app.post('/hostelDue',async (req,res) => {
     }
 });
 
-//Subject - wise Attendance
+
+
+
+
+
+// This route fetches a student's subject-wise attendance using their session token. 
+// If not found in Firestore or if refresh is requested, it scrapes the subject-wise attendance table 
+// (with subject code, name, total hours, present, absent, and percentage), stores/updates it in Firestore, 
+// and returns it. Otherwise, it serves the cached data from Firestore.
+
 app.post('/subjectWiseAttendance',async (req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -433,7 +513,77 @@ app.post('/subjectWiseAttendance',async (req,res) => {
     }
 });
 
-// To fetch semester-wise grades & credits
+
+app.post('/hourWiseAttendance',async (req,res) => {
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
+    try
+    {
+      //Storing hour-wise attendance in Firestore
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().hourWiseAttendance)
+      {
+        await page.goto("https://webstream.sastra.edu/sastrapwi/academy/studentHourWiseAttendance.jsp");
+        const hourWiseAttendance = await page.evaluate(() => {
+            const table = document.querySelector('table[name="table1"]');
+            if (!table)
+              return "No record found";
+            const tbody = table.querySelector("tbody");
+            const rows = Array.from(tbody.getElementsByTagName("tr"));
+            const attendance = []
+            for (let i=0;i<rows.length;i++)
+            {
+              const coloumns = rows[i].getElementsByTagName("td");
+              attendance.push({
+                dateDay : coloumns[0]?.innerText?.trim(),
+                hour1 : coloumns[1]?.innerText?.trim(),
+                hour2 : coloumns[2]?.innerText?.trim(),
+                hour3 : coloumns[3]?.innerText?.trim(),
+                hour4 : coloumns[4]?.innerText?.trim(),
+                hour5 : coloumns[5]?.innerText?.trim(),
+                hour6 : coloumns[6]?.innerText?.trim(),
+                hour7 : coloumns[7]?.innerText?.trim(),
+                hour8 : coloumns[8]?.innerText?.trim(),
+              });
+              return attendance;
+            }
+        });
+        await docRef.set({
+          hourWiseAttendance : hourWiseAttendance,
+          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        },{merge:true});
+        res.json({ success: true, hourWiseAttendance });
+      }
+      else
+      {
+        res.json({ success: true, hourWiseAttendance: doc.data().hourWiseAttendance});
+      }
+    }
+    catch(error)
+    {
+      res.status(500).json({ success: false, message: "Failed to fetch attendance", error: error.message });
+    }
+    finally{
+      await page.close();
+    }
+});
+
+
+
+
+
+
+// This route fetches a student's semester-wise grades using their session token. 
+// If not found in Firestore or if refresh is requested, it scrapes the grades table 
+// (with semester, month/year, subject code, subject name, credit, and grade), 
+// stores/updates it in Firestore, and returns it. Otherwise, it serves the cached data from Firestore.
+
 app.post('/semGrades', async (req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -492,7 +642,16 @@ app.post('/semGrades', async (req,res) => {
     }
 });
 
-//To fetch status of student (Hosteler/Dayscholar)
+
+
+
+
+
+// This route fetches a student's status(Dayscholar/Hosteller) using their session token. 
+// If not found in Firestore or if refresh is requested, it scrapes the student status table 
+// (specifically the status row), stores/updates it in Firestore, and returns it. 
+// Otherwise, it serves the cached status from Firestore.
+
 app.post('/studentStatus', async(req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -549,7 +708,16 @@ app.post('/studentStatus', async(req,res) => {
     }
 });
 
-// To fetch each sem SGPA
+
+
+
+
+
+// This route fetches a student's SGPA for each semester using their session token. 
+// If not found in Firestore or if refresh is requested, it scrapes the SGPA table 
+// (semester and SGPA values), stores/updates it in Firestore, and returns it. 
+// Otherwise, it serves the cached SGPA from Firestore.
+
 app.post('/sgpa', async(req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -603,7 +771,18 @@ app.post('/sgpa', async(req,res) => {
     }
 });
 
-// To fetch overall CGPA
+
+
+
+
+
+// POST /cgpa
+// 1. Validates user session using token.
+// 2. If CGPA not cached in Firestore (or refresh=true), scrapes CGPA from SASTRA portal.
+// 3. Stores/updates CGPA in Firestore with timestamp.
+// 4. Returns CGPA from Firestore if already available.
+// 5. Handles errors and ensures Puppeteer page is closed.
+
 app.post('/cgpa', async(req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -659,7 +838,19 @@ app.post('/cgpa', async(req,res) => {
     }
 });
 
-// To fetch DOB
+
+
+
+
+
+// POST /dob
+// - Validates user session from token.
+// - Checks Firestore for existing DOB (or refresh flag).
+// - If not available, navigates to SASTRA portal (resourceid=59),
+//   scrapes DOB from table row, and stores it in Firestore with timestamp.
+// - Returns cached DOB if already present.
+// - Handles errors gracefully and ensures Puppeteer page is closed.
+
 app.post('/dob', async(req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -711,7 +902,20 @@ app.post('/dob', async(req,res) => {
     }
 });
 
-// To fetch faculty list
+
+
+
+
+
+// POST /facultyList
+// - Validates user session from token.
+// - Checks Firestore for existing faculty list (or refresh flag).
+// - If not available, navigates to SASTRA timetable page,
+//   scrapes subject code, description, section, faculty, and venue,
+//   then stores the list in Firestore with timestamp.
+// - Returns cached faculty list if already present.
+// - Handles errors and ensures Puppeteer page is closed.
+
 app.post('/facultyList', async  (req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -773,7 +977,20 @@ app.post('/facultyList', async  (req,res) => {
   }
 });
 
-//To fetch the credits of current semester
+
+
+
+
+
+// POST /currentSemCredits
+// - Validates user session from token.
+// - Checks Firestore for existing current semester credits (or refresh flag).
+// - If not available, navigates to course registration page,
+//   scrapes course code, name, and credit values for each subject,
+//   then stores the data in Firestore with timestamp.
+// - Returns cached credits if already present.
+// - Handles errors and ensures Puppeteer page is closed.
+
 app.post('/currentSemCredits',async (req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -829,7 +1046,21 @@ app.post('/currentSemCredits',async (req,res) => {
     }
 });
 
-// To fetch timetable
+
+
+
+
+
+// POST /timetable
+// - Validates user session using token.
+// - Checks Firestore for existing timetable (or refresh flag).
+// - If missing or refresh requested:
+//     • Navigates to student timetable page.
+//     • Scrapes day-wise timetable including lecture slots and breaks.
+//     • Stores timetable in Firestore with timestamp.
+// - Returns cached timetable if available.
+// - Ensures Puppeteer page is closed and handles errors properly.
+
 app.post('/timetable', async  (req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -896,7 +1127,21 @@ app.post('/timetable', async  (req,res) => {
   }
 });
 
-// To fetch timetable for bunk (trim)
+
+
+
+
+
+// POST /timetableBunk
+// - Validates user session using token.
+// - Checks Firestore for existing timetable (or refresh flag).
+// - If missing or refresh requested:
+//     • Navigates to student timetable page.
+//     • Scrapes day-wise timetable slots, cleaning cell values
+//       (removes extra text after commas, defaults to "N/A").
+//     • Stores timetable in Firestore with timestamp.
+// - Returns cached timetable if available.
+
 app.post('/timetableBunk', async  (req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
@@ -970,6 +1215,14 @@ app.post('/timetableBunk', async  (req,res) => {
   }
 });
 
+
+
+
+
+// - Includes `daysPerSem` mapping to indicate number of class
+//   days per semester for each weekday (Mon–Sun).
+// - Handles errors gracefully and always closes Puppeteer page.
+
 const daysPerSem = {
   Mon: 15,
   Tue: 15,
@@ -980,7 +1233,20 @@ const daysPerSem = {
   Sun: 0
 };
 
-//To fetch no. of bunks
+
+
+
+
+
+
+// /bunk route calculates student bunk statistics based on timetable
+// 1. Fetches the student's timetable from Firestore using regNo
+// 2. Computes per-day class counts for each course
+// 3. Aggregates total classes per course for the week
+// 4. Projects total classes per course for the semester using daysPerSem
+// 5. Calculates 20% of semester classes per course as allowed bunk limit
+// 6. Returns a structured JSON with per-day, weekly, semester, and 20% bunk info
+
 app.post('/bunk', async (req, res) => {
   let { regNo } = req.body;
   regNo = "Register No. " + regNo;
@@ -1050,7 +1316,15 @@ app.post('/bunk', async (req, res) => {
   }
 });
 
-// Chatbot
+
+
+
+
+
+
+// subjectMap: Maps short subject codes to Google Drive links containing PYQs
+// Some subjects (like Java) have multiple links in an array
+
 const subjectMap = {
   "co": "https://drive.google.com/drive/folders/12ilquRi9o9yy1RPaUjbcUP1yfCVWHf0_",
   "ds": "https://drive.google.com/drive/folders/12VT1DKfSzfzbw_IPQIHAB2v6fdJnnqCn",
@@ -1099,6 +1373,11 @@ const subjectMap = {
   "dcn": "https://drive.google.com/drive/folders/17KnsJA0f4VR7SPK1suLyxicqUEpSt21I",
   "ss": "https://drive.google.com/drive/folders/1328YXH_UeCqdMi1LJCxLtRLeohdimr-N"
 };
+
+
+
+// subjectAliasMap: Maps various ways a user can refer to a subject to the short subject code
+// Helps match user queries to the correct Drive link
 
 const subjectAliasMap = {
   "computer organisation": "co",
@@ -1246,6 +1525,17 @@ const subjectAliasMap = {
   "ss": "ss"
 };
 
+
+
+
+
+// POST /chatbot
+// 1. Receives a 'message' from user
+// 2. Converts message to lowercase
+// 3. Tries to find the longest matching subject alias in the message
+// 4. If found, returns the corresponding Drive link(s) for that subject's PYQs
+// 5. If no match, returns a friendly message saying no PYQs found
+
 app.post('/chatbot', async(req,res) => {
     try
     {
@@ -1274,7 +1564,16 @@ app.post('/chatbot', async(req,res) => {
     }
 });
 
-// To fetch depatment-wise PYQs
+
+
+
+
+
+// GET /pyq
+// Returns a list of department-wise PYQ Drive links
+// Each entry has a 'dept' name and corresponding Drive 'url'
+// Useful for fetching general PYQs for a department rather than a specific subject
+
 app.get('/pyq', async(req,res) => {
     return res.json([
       {
@@ -1316,7 +1615,14 @@ app.get('/pyq', async(req,res) => {
     ]);
 });
 
+
+
+
+
+
+
 // To fetch mess menu
+
 const menuData = [
       //Week 1
       {
