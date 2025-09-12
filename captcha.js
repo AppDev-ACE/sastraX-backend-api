@@ -6,8 +6,8 @@ const path = require('path');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const cloudinary = require('cloudinary').v2;
-const serviceAccountPath = path.join(__dirname, 'serviceAccountKey.json');
-const serviceAccount = require(serviceAccountPath);
+
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 const app = express();
 app.use(cors());
