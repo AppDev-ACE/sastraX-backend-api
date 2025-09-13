@@ -8,6 +8,8 @@ const admin = require('firebase-admin');
 const cloudinary = require('cloudinary').v2;
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+console.log(process.env.FIREBASE_SERVICE_ACCOUNT ? "ENV loaded" : "ENV missing");
+
 
 const app = express();
 app.use(cors());
@@ -535,11 +537,11 @@ app.post('/hourWiseAttendance',async (req,res) => {
             if (!table)
               return "No record found";
             const tbody = table.querySelector("tbody");
-            const rows = Array.from(tbody.getElementsByTagName("tr"));
+            const rows = Array.from(tbody.querySelectorAll("tr"));
             const attendance = []
-            for (let i=0;i<rows.length;i++)
+            for (let i=1;i<rows.length;i++)
             {
-              const coloumns = rows[i].getElementsByTagName("td");
+              const coloumns = rows[i].querySelectorAll("td");
               attendance.push({
                 dateDay : coloumns[0]?.innerText?.trim(),
                 hour1 : coloumns[1]?.innerText?.trim(),
@@ -551,8 +553,8 @@ app.post('/hourWiseAttendance',async (req,res) => {
                 hour7 : coloumns[7]?.innerText?.trim(),
                 hour8 : coloumns[8]?.innerText?.trim(),
               });
-              return attendance;
             }
+            return attendance;
         });
         await docRef.set({
           hourWiseAttendance : hourWiseAttendance,
