@@ -7,9 +7,13 @@ const cors = require('cors');
 const admin = require('firebase-admin');
 const cloudinary = require('cloudinary').v2;
 
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-console.log(process.env.FIREBASE_SERVICE_ACCOUNT ? "ENV loaded" : "ENV missing");
-
+const serviceAccount = {
+  type: "service_account",
+  project_id: process.env.FIREBASE_PROJECT_ID,
+  private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  client_email: process.env.FIREBASE_CLIENT_EMAIL,
+  token_uri: "https://oauth2.googleapis.com/token"
+};
 
 const app = express();
 app.use(cors());
