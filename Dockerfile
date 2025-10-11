@@ -1,13 +1,14 @@
 # -------------------------------
-# Puppeteer + Node.js + Chrome Dockerfile
+# Puppeteer + Node.js Dockerfile
 # -------------------------------
 
 # Use Node.js LTS slim image
 FROM node:20-slim
 
-# Install dependencies needed for headless Chrome
+# Install dependencies for Puppeteer / Chromium
 RUN apt-get update && apt-get install -y \
-    gconf-service \
+    ca-certificates \
+    fonts-liberation \
     libasound2 \
     libatk1.0-0 \
     libc6 \
@@ -37,33 +38,25 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     libxss1 \
     libxtst6 \
-    ca-certificates \
-    fonts-liberation \
-    lsb-release \
-    wget \
     unzip \
+    wget \
     xdg-utils \
-    --no-install-recommends && rm -rf /var/lib/apt/lists/*
-
-# Install Google Chrome (modern method)
-RUN wget -q -O /usr/share/keyrings/google-linux-signing-key.gpg https://dl.google.com/linux/linux_signing_key.pub \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-linux-signing-key.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update && apt-get install -y google-chrome-stable --no-install-recommends \
+    --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json
+# Copy package.json and package-lock.json first (for caching)
 COPY package*.json ./
 
-# Install Node.js dependencies
+# Install Node.js dependencies (this will also install Puppeteer and download Chromium)
 RUN npm install
 
-# Copy application code (excluding secrets)
+# Copy the rest of the application code
 COPY . .
 
-# Set environment variable for Render/Cloud Run
+# Set environment variable for Render / Cloud Run
 ENV PORT=8080
 
 # Expose the port

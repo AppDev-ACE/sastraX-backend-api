@@ -36,7 +36,6 @@ let browser;
   browser = await puppeteer.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'], //to host publicly
-    executablePath: '/usr/bin/google-chrome-stable'
   });
   console.log("Puppeteer launched, starting server...");
   app.listen(3000, () => console.log("Server running on port 3000"));
