@@ -1648,7 +1648,7 @@ const menuData = [
       {
         week : "2",
         day : "Wednesday",
-        breakfast : ["Sevai(Coconut/Tomato)","Sambar","Coconut Chutney","Ragi Koozhu","Curd Chilly","BBJ"],
+        breakfast : ["Idiyappam (3 Nos)","Veg Kuruma","Ragi Koozhu","Curd Chilly","BBJ"],
         lunch : ["Chappathi","Aloo Capsicum Masala","White Rice","Sambar","Carrot Poriyal","Bonda (1 No)","Mysore Rasam","Curd","Fryums","Pickle","Paruppu Podi with Oil"],
         snacks: ["Tea, Milk and Coffee","Coconut Mango Peas Sundal"],
         dinner: ["Butter Chappathi","Kadai Veg Gravy","Sambar Rice","Potato Poriyal","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
@@ -1675,7 +1675,7 @@ const menuData = [
         breakfast : ["Idly","Sambar","Tomato Chutney","Podi with Oil"],
         lunch : ["Chappathi","Green Peas Masala","White Rice","Spinach Sambar","Beans Usili","Aviyal","Dhall Rasam","Curd","Appalam","Pickle"],
         snacks: ["Tea, Milk and Coffee","Green Moongdal Sundal"],
-        dinner: ["Chappathi","White Kuruma","Coconut Rice","Potato Kara Curry","Curd Rice","Fryums","Pickle","Banana (1 No)"] 
+        dinner: ["Idiyappam (2 Nos)","Veg Kuruma","White Rice","Rasam","Butter Milk","Fryums","Pickle","Banana (1 No)"] 
       },
       {
         week : "2",
@@ -1700,13 +1700,13 @@ const menuData = [
         day : "Tuesday",
         breakfast : ["Idly","Carrot Beans Sambar","Peanut Chutney","Podi with Oil","BBJ"],
         lunch : ["Chappathi","White Kuruma","White Rice","Raddish Sambar","Cabbage Peas Poriyal","Masala Vada","Dhall Rasam","Curd","Fryums","Pickle"],
-        snacks: ["Tea, Milk and Coffee","Spinach Vada/Chilly Bajji"],
+        snacks: ["Tea, Milk and Coffee","Chilly Bajji"],
         dinner: ["Dosa","Sambar","Coriander Chutney","Malli Rice","Thuvaiyal","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
         week : "1",
         day : "Wednesday",
-        breakfast : ["Sevai(Lemon/Tamarind)","Sambar","Coconut Chutney","Ragi Koozhu","Curd Chilly","Masala Vada"],
+        breakfast : ["Idiyappam (3 Nos)","Veg Kuruma","Ragi Koozhu","Curd Chilly","Masala Vada"],
         lunch : ["Chappathi","Palak Paneer","White Rice","Ladies Finger Morekuzhambu","Yam Channa Poriyal","Tindly Kara Curry","Malli Rasam","Curd","Appalam","Pickle","Paruppu Podi with Oil"],
         snacks: ["Tea, Milk and Coffee","Milk Bikies"],
         dinner: ["Veg Biriyani","Onion Raitha","Potato Chips","Rasam Rice","Curd Rice","Pickle","Banana (1 No)"] 
@@ -1741,7 +1741,7 @@ const menuData = [
         breakfast : ["Poori","Aloo/Channa Masala"],
         lunch : ["Veg Fried Rice","Mix Veg Manchurian","White Rice","Dhall & Ghee","Aloo Kara Curry","Tomato Rasam","Buttermilk","Appalam","Pickle","Vermicelli Payasam/Fruit Salad"],
         snacks: ["Tea, Milk and Coffee","Cream Bun"],
-        dinner: ["Idly","Sambar","Coconut Chutney","Chappathi","Mix Veg Gravy","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
+        dinner: ["Idiayappam (2 Nos)","Mix Veg Gravy","Chappathi","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
       },
 
       //Week 4
@@ -1764,7 +1764,7 @@ const menuData = [
       {
         week : "4",
         day : "Wednesday",
-        breakfast : ["Sevai(Coconut/Tomato)","Sambar","Coconut Chutney","Ragi Koozhu","Curd Chilly","BBJ"],
+        breakfast : ["Idiyappam (3 Nos)","Veg Kuruma","Ragi Koozhu","Curd Chilly","BBJ"],
         lunch : ["Chappathi","Aloo Capsicum Masala","White Rice","Sambar","Carrot Poriyal","Bonda (1 No)","Mysore Rasam","Curd","Fryums","Pickle","Paruppu Podi with Oil"],
         snacks: ["Tea, Milk and Coffee","Coconut Mango Peas Sundal"],
         dinner: ["Butter Chappathi","Kadai Veg Gravy","Sambar Rice","Potato Poriyal","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
@@ -1791,7 +1791,7 @@ const menuData = [
         breakfast : ["Idly","Sambar","Tomato Chutney","Podi with Oil"],
         lunch : ["Chappathi","Green Peas Masala","White Rice","Spinach Sambar","Beans Usili","Aviyal","Dhall Rasam","Curd","Appalam","Pickle"],
         snacks: ["Tea, Milk and Coffee","Green Moongdal Sundal"],
-        dinner: ["Chappathi","White Kuruma","Coconut Rice","Potato Kara Curry","Curd Rice","Fryums","Pickle","Banana (1 No)"] 
+        dinner: ["Idiyappam (2 Nos)","Veg Kuruma","White Rice","Rasam","Butter Milk","Fryums","Pickle","Banana (1 No)"] 
       },
       {
         week : "4",
@@ -1816,13 +1816,13 @@ const menuData = [
         day : "Tuesday",
         breakfast : ["Idly","Carrot Beans Sambar","Peanut Chutney","Podi with Oil","BBJ"],
         lunch : ["Chappathi","White Kuruma","White Rice","Raddish Sambar","Cabbage Peas Poriyal","Masala Vada","Dhall Rasam","Curd","Fryums","Pickle"],
-        snacks: ["Tea, Milk and Coffee","Spinach Vada/Chilly Bajji"],
+        snacks: ["Tea, Milk and Coffee","Chilly Bajji"],
         dinner: ["Dosa","Sambar","Coriander Chutney","Malli Rice","Thuvaiyal","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
         week : "3",
         day : "Wednesday",
-        breakfast : ["Sevai(Lemon/Tamarind)","Sambar","Coconut Chutney","Ragi Koozhu","Curd Chilly","Masala Vada"],
+        breakfast : ["Idiyappam (3 Nos)","Veg Kuruma","Ragi Koozhu","Curd Chilly","Masala Vada"],
         lunch : ["Chappathi","Palak Paneer","White Rice","Ladies Finger Morekuzhambu","Yam Channa Poriyal","Tindly Kara Curry","Malli Rasam","Curd","Appalam","Pickle","Paruppu Podi with Oil"],
         snacks: ["Tea, Milk and Coffee","Milk Bikies"],
         dinner: ["Veg Biriyani","Onion Raitha","Potato Chips","Rasam Rice","Curd Rice","Pickle","Banana (1 No)"] 
@@ -1857,7 +1857,7 @@ const menuData = [
         breakfast : ["Poori","Aloo/Channa Masala"],
         lunch : ["Veg Fried Rice","Mix Veg Manchurian","White Rice","Dhall & Ghee","Aloo Kara Curry","Tomato Rasam","Buttermilk","Appalam","Pickle","Vermicelli Payasam/Fruit Salad"],
         snacks: ["Tea, Milk and Coffee","Cream Bun"],
-        dinner: ["Idly","Sambar","Coconut Chutney","Chappathi","Mix Veg Gravy","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
+        dinner: ["Idiayappam (2 Nos)","Mix Veg Gravy","Chappathi","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
       },
     ];
 app.get('/messMenu', async (req,res) => {
