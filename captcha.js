@@ -7,21 +7,21 @@ const cors = require('cors');
 const admin = require('firebase-admin');
 const cloudinary = require('cloudinary').v2;
 
-const serviceAccount = {
-  type: "service_account",
-  project_id: process.env.FIREBASE_PROJECT_ID,
-  private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-  client_email: process.env.FIREBASE_CLIENT_EMAIL,
-  token_uri: "https://oauth2.googleapis.com/token"
-};
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+admin.initializeApp({
+  credential: admin.credential.cert({
+    projectId: serviceAccount.project_id,
+    clientEmail: serviceAccount.client_email,
+    privateKey: serviceAccount.private_key.replace(/\\n/g, '\n'), // ✅ now works
+  }),
+});
+
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-admin.initializeApp({
-  credential : admin.credential.cert(serviceAccount)
-});
 const db = admin.firestore();
 
 cloudinary.config({
@@ -255,8 +255,6 @@ app.post('/profilePic', async(req, res) => {
         const profilePath = path.join(__dirname, 'profile.png');
         const profileElement = await page.$('img[alt="Photo not found"]');
         await profileElement.screenshot({ path: profilePath });
-
-        res.sendFile(profilePath);
 
         const result = await cloudinary.uploader.upload(profilePath, {
           overwrite: true
