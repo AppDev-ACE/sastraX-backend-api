@@ -2,10 +2,9 @@
 # Puppeteer + Node.js Dockerfile
 # -------------------------------
 
-# Use Node.js LTS slim image
 FROM node:20-slim
 
-# Install dependencies for Puppeteer / Chromium
+# Install all dependencies needed for Chromium
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     fonts-liberation \
@@ -38,29 +37,29 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     libxss1 \
     libxtst6 \
+    libgbm1 \
     unzip \
     wget \
     xdg-utils \
-    --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
+    --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json first (for caching)
+# Copy package.json first (cache npm install)
 COPY package*.json ./
 
-# Install Node.js dependencies (this will also install Puppeteer and download Chromium)
+# Install dependencies (Puppeteer will download Chromium automatically)
 RUN npm install
 
 # Copy the rest of the application code
 COPY . .
 
-# Set environment variable for Render / Cloud Run
+# Set environment variable
 ENV PORT=8080
 
 # Expose the port
 EXPOSE 8080
 
-# Start the server
+# Launch the server
 CMD ["node", "captcha.js"]
