@@ -1628,9 +1628,9 @@ app.get('/pyq', async(req,res) => {
 // To fetch mess menu
 
 const menuData = [
-      //Week 1
+      //Week 2
       {
-        week : "1",
+        week : "2",
         day : "Monday",
         breakfast : ["Dosa","Vadacurry","Chutney","BBJ"],
         lunch : ["Chappathi","Channa Masala","White Rice","Onion Drumstick Sambar","Potato Poriyal","Karamani Poriyal","Tomato Rasam","Curd","Fryums","Pickle","Paruppu Podi with Oil"],
@@ -1638,7 +1638,7 @@ const menuData = [
         dinner: ["Chappathi","Mix Veg Gravy","Brinji Rice","Raitha","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "1",
+        week : "2",
         day : "Tuesday",
         breakfast : ["Pongal","Sambar","Cocunut Chutney","Medhu Vada(1)","Oats & Milk"],
         lunch : ["Chappathi","Dhall Fry","White Rice","Bindi Karakuzhambu","Raw Banana Poriyal","Spinach Kootu","Malli Rasam","Curd","Appalam","Pickle"],
@@ -1646,7 +1646,7 @@ const menuData = [
         dinner: ["Idly","Sambar","Coconut Chutney","Bisebelabath","Curd Rice","Fryums","Pickle","Banana (1 No)"] 
       },
       {
-        week : "1",
+        week : "2",
         day : "Wednesday",
         breakfast : ["Sevai(Coconut/Tomato)","Sambar","Coconut Chutney","Ragi Koozhu","Curd Chilly","BBJ"],
         lunch : ["Chappathi","Aloo Capsicum Masala","White Rice","Sambar","Carrot Poriyal","Bonda (1 No)","Mysore Rasam","Curd","Fryums","Pickle","Paruppu Podi with Oil"],
@@ -1654,7 +1654,7 @@ const menuData = [
         dinner: ["Butter Chappathi","Kadai Veg Gravy","Sambar Rice","Potato Poriyal","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
       },
       {
-        week : "1",
+        week : "2",
         day : "Thursday",
         breakfast : ["Vegetable Rava Kichadi","Sambar","Cocunut Chutney","Masala Vada(1)"],
         lunch : ["Chappathi","White Channa Kuruma","White Rice","Vathakuzhambu","Yam 65","Chow Chow Kootu","Garlic Rasam","Curd","Appalam","Pickle"],
@@ -1662,7 +1662,7 @@ const menuData = [
         dinner: ["Dosa","Sambar/Chutney","Rasam Rice","Curd Rice","Lemon Juice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "1",
+        week : "2",
         day : "Friday",
         breakfast : ["Uthappam","Sambar","Kara Chutney","Podi with Oil"],
         lunch : ["Chappathi","Paneer Butter Masala","White Rice","Pumpkin Morekuzhambu","Beetroot Channa Poriyal","Cabbage Peas Poriyal","Pineapple Rasam","Curd","Fryums","Pickle","Jangiri","Paruppu Podi with Oil"],
@@ -1670,7 +1670,7 @@ const menuData = [
         dinner: ["Chappathi","Black Channa Masala","Tomato Rice","Raitha","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
       },
       {
-        week : "1",
+        week : "2",
         day : "Saturday",
         breakfast : ["Idly","Sambar","Tomato Chutney","Podi with Oil"],
         lunch : ["Chappathi","Green Peas Masala","White Rice","Spinach Sambar","Beans Usili","Aviyal","Dhall Rasam","Curd","Appalam","Pickle"],
@@ -1678,7 +1678,7 @@ const menuData = [
         dinner: ["Chappathi","White Kuruma","Coconut Rice","Potato Kara Curry","Curd Rice","Fryums","Pickle","Banana (1 No)"] 
       },
       {
-        week : "1",
+        week : "2",
         day : "Sunday",
         breakfast : ["Vermicelli Upma","Sambar","Coconut Chutney","Medhu Vada(1)","BBJ"],
         lunch : ["Aloo Paratha","Hyderabad Veg Biriyani","Boondhi Raitha","White Rice","Dhall","Rasam","Buttermilk","Appalam","Pickle","Icecream"],
@@ -1686,9 +1686,9 @@ const menuData = [
         dinner: ["Sambarava Upma","Sambar","Peanut Chutney","Uthappam","Curd Rice","Pickle","Banana (1 No)"] 
       },
 
-      //Week 2
+      //Week 1
       {
-        week : "2",
+        week : "1",
         day : "Monday",
         breakfast : ["Raagi Dosa","Drumstick Sambar","Tomato Chutney","Cornflakes & Hot Milk"],
         lunch : ["Chappathi","Dhall Tadka","White Rice","Sundavathal Karakuzhambu","Raw Banana Poriyal","Spinach Kootu","Tomato Rasam","Curd","Appalam","Pickle","Paruppu Podi with Oil"],
@@ -1696,7 +1696,7 @@ const menuData = [
         dinner: ["Chappathi","Aloo Mutter Masala","Rava Upma","Sambar","Coconut Chutney","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "2",
+        week : "1",
         day : "Tuesday",
         breakfast : ["Idly","Carrot Beans Sambar","Peanut Chutney","Podi with Oil","BBJ"],
         lunch : ["Chappathi","White Kuruma","White Rice","Raddish Sambar","Cabbage Peas Poriyal","Masala Vada","Dhall Rasam","Curd","Fryums","Pickle"],
@@ -1704,7 +1704,7 @@ const menuData = [
         dinner: ["Dosa","Sambar","Coriander Chutney","Malli Rice","Thuvaiyal","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "2",
+        week : "1",
         day : "Wednesday",
         breakfast : ["Sevai(Lemon/Tamarind)","Sambar","Coconut Chutney","Ragi Koozhu","Curd Chilly","Masala Vada"],
         lunch : ["Chappathi","Palak Paneer","White Rice","Ladies Finger Morekuzhambu","Yam Channa Poriyal","Tindly Kara Curry","Malli Rasam","Curd","Appalam","Pickle","Paruppu Podi with Oil"],
@@ -1712,7 +1712,7 @@ const menuData = [
         dinner: ["Veg Biriyani","Onion Raitha","Potato Chips","Rasam Rice","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "2",
+        week : "1",
         day : "Thursday",
         breakfast : ["Mix Veg Uthappam","Small Onion Sambar","Kara Chutney","Podi with Oil","BBJ"],
         lunch : ["Chappathi","Rajma Masala","White Rice","Mix Veg Sambar","Aloo 65","Podalanga Kootu","Mysore Rasam","Curd","Fryums","Pickle"],
@@ -1720,7 +1720,7 @@ const menuData = [
         dinner: ["Chappathi","Veg Kuruma","Sambar Rice","Potato Poriyal","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "2",
+        week : "1",
         day : "Friday",
         breakfast : ["Poha","Sambar","Coconut Chutney","Medhu Vada(1)"],
         lunch : ["Chappathi","Veg Salna","White Rice","Spinach Kuzhambu","Beans Usili","Aviyal","Lemon Rasam","Curd","Fryums","Pickle","Pineapple Kesari"],
@@ -1728,7 +1728,7 @@ const menuData = [
         dinner: ["Onion Uthappam","Sambar","Malli Chutney","Rasam Rice","Thuvaiyal","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "2",
+        week : "1",
         day : "Saturday",
         breakfast : ["Pongal","Tiffin Sambar","Cocunut Chutney","Medhu Vada(1)","BBJ"],
         lunch : ["Chappathi","Green Peas Masala","White Rice","Onion Sambar","Beetrrot Channa Poriyal","Carrot Coconut Poriyal","Garlic Rasam","Curd","Fryums","Pickle","Paruppu Podi with Oil"],
@@ -1736,7 +1736,7 @@ const menuData = [
         dinner: ["Maggi Noodles","Tomato Sauce","Brinji Rice","Raitha","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
       },
       {
-        week : "2",
+        week : "1",
         day : "Sunday",
         breakfast : ["Poori","Aloo/Channa Masala"],
         lunch : ["Veg Fried Rice","Mix Veg Manchurian","White Rice","Dhall & Ghee","Aloo Kara Curry","Tomato Rasam","Buttermilk","Appalam","Pickle","Vermicelli Payasam/Fruit Salad"],
@@ -1744,9 +1744,9 @@ const menuData = [
         dinner: ["Idly","Sambar","Coconut Chutney","Chappathi","Mix Veg Gravy","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
       },
 
-      //Week 3
+      //Week 4
       {
-        week : "3",
+        week : "4",
         day : "Monday",
         breakfast : ["Dosa","Vadacurry","Chutney","BBJ"],
         lunch : ["Chappathi","Channa Masala","White Rice","Onion Drumstick Sambar","Potato Poriyal","Karamani Poriyal","Tomato Rasam","Curd","Fryums","Pickle","Paruppu Podi with Oil"],
@@ -1754,7 +1754,7 @@ const menuData = [
         dinner: ["Chappathi","Mix Veg Gravy","Brinji Rice","Raitha","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "3",
+        week : "4",
         day : "Tuesday",
         breakfast : ["Pongal","Sambar","Cocunut Chutney","Medhu Vada(1)","Oats & Milk"],
         lunch : ["Chappathi","Dhall Fry","White Rice","Bindi Karakuzhambu","Raw Banana Poriyal","Spinach Kootu","Malli Rasam","Curd","Appalam","Pickle"],
@@ -1762,7 +1762,7 @@ const menuData = [
         dinner: ["Idly","Sambar","Coconut Chutney","Bisebelabath","Curd Rice","Fryums","Pickle","Banana (1 No)"] 
       },
       {
-        week : "3",
+        week : "4",
         day : "Wednesday",
         breakfast : ["Sevai(Coconut/Tomato)","Sambar","Coconut Chutney","Ragi Koozhu","Curd Chilly","BBJ"],
         lunch : ["Chappathi","Aloo Capsicum Masala","White Rice","Sambar","Carrot Poriyal","Bonda (1 No)","Mysore Rasam","Curd","Fryums","Pickle","Paruppu Podi with Oil"],
@@ -1770,7 +1770,7 @@ const menuData = [
         dinner: ["Butter Chappathi","Kadai Veg Gravy","Sambar Rice","Potato Poriyal","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
       },
       {
-        week : "3",
+        week : "4",
         day : "Thursday",
         breakfast : ["Vegetable Rava Kichadi","Sambar","Cocunut Chutney","Masala Vada(1)"],
         lunch : ["Chappathi","White Channa Kuruma","White Rice","Vathakuzhambu","Yam 65","Chow Chow Kootu","Garlic Rasam","Curd","Appalam","Pickle"],
@@ -1778,7 +1778,7 @@ const menuData = [
         dinner: ["Dosa","Sambar/Chutney","Rasam Rice","Curd Rice","Lemon Juice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "3",
+        week : "4",
         day : "Friday",
         breakfast : ["Uthappam","Sambar","Kara Chutney","Podi with Oil"],
         lunch : ["Chappathi","Paneer Butter Masala","White Rice","Pumpkin Morekuzhambu","Beetroot Channa Poriyal","Cabbage Peas Poriyal","Pineapple Rasam","Curd","Fryums","Pickle","Jangiri","Paruppu Podi with Oil"],
@@ -1786,7 +1786,7 @@ const menuData = [
         dinner: ["Chappathi","Black Channa Masala","Tomato Rice","Raitha","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
       },
       {
-        week : "3",
+        week : "4",
         day : "Saturday",
         breakfast : ["Idly","Sambar","Tomato Chutney","Podi with Oil"],
         lunch : ["Chappathi","Green Peas Masala","White Rice","Spinach Sambar","Beans Usili","Aviyal","Dhall Rasam","Curd","Appalam","Pickle"],
@@ -1794,7 +1794,7 @@ const menuData = [
         dinner: ["Chappathi","White Kuruma","Coconut Rice","Potato Kara Curry","Curd Rice","Fryums","Pickle","Banana (1 No)"] 
       },
       {
-        week : "3",
+        week : "4",
         day : "Sunday",
         breakfast : ["Vermicelli Upma","Sambar","Coconut Chutney","Medhu Vada(1)","BBJ"],
         lunch : ["Aloo Paratha","Hyderabad Veg Biriyani","Boondhi Raitha","White Rice","Dhall","Rasam","Buttermilk","Appalam","Pickle","Icecream"],
@@ -1802,9 +1802,9 @@ const menuData = [
         dinner: ["Sambarava Upma","Sambar","Peanut Chutney","Uthappam","Curd Rice","Pickle","Banana (1 No)"] 
       },
 
-      //Week 4
+      //Week 3
       {
-        week : "4",
+        week : "3",
         day : "Monday",
         breakfast : ["Raagi Dosa","Drumstick Sambar","Tomato Chutney","Cornflakes & Hot Milk"],
         lunch : ["Chappathi","Dhall Tadka","White Rice","Sundavathal Karakuzhambu","Raw Banana Poriyal","Spinach Kootu","Tomato Rasam","Curd","Appalam","Pickle","Paruppu Podi with Oil"],
@@ -1820,7 +1820,7 @@ const menuData = [
         dinner: ["Dosa","Sambar","Coriander Chutney","Malli Rice","Thuvaiyal","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "4",
+        week : "3",
         day : "Wednesday",
         breakfast : ["Sevai(Lemon/Tamarind)","Sambar","Coconut Chutney","Ragi Koozhu","Curd Chilly","Masala Vada"],
         lunch : ["Chappathi","Palak Paneer","White Rice","Ladies Finger Morekuzhambu","Yam Channa Poriyal","Tindly Kara Curry","Malli Rasam","Curd","Appalam","Pickle","Paruppu Podi with Oil"],
@@ -1828,7 +1828,7 @@ const menuData = [
         dinner: ["Veg Biriyani","Onion Raitha","Potato Chips","Rasam Rice","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "4",
+        week : "3",
         day : "Thursday",
         breakfast : ["Mix Veg Uthappam","Small Onion Sambar","Kara Chutney","Podi with Oil","BBJ"],
         lunch : ["Chappathi","Rajma Masala","White Rice","Mix Veg Sambar","Aloo 65","Podalanga Kootu","Mysore Rasam","Curd","Fryums","Pickle"],
@@ -1836,7 +1836,7 @@ const menuData = [
         dinner: ["Chappathi","Veg Kuruma","Sambar Rice","Potato Poriyal","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "4",
+        week : "3",
         day : "Friday",
         breakfast : ["Poha","Sambar","Coconut Chutney","Medhu Vada(1)"],
         lunch : ["Chappathi","Veg Salna","White Rice","Spinach Kuzhambu","Beans Usili","Aviyal","Lemon Rasam","Curd","Fryums","Pickle","Pineapple Kesari"],
@@ -1844,7 +1844,7 @@ const menuData = [
         dinner: ["Onion Uthappam","Sambar","Malli Chutney","Rasam Rice","Thuvaiyal","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "4",
+        week : "3",
         day : "Saturday",
         breakfast : ["Pongal","Tiffin Sambar","Cocunut Chutney","Medhu Vada(1)","BBJ"],
         lunch : ["Chappathi","Green Peas Masala","White Rice","Onion Sambar","Beetrrot Channa Poriyal","Carrot Coconut Poriyal","Garlic Rasam","Curd","Fryums","Pickle","Paruppu Podi with Oil"],
@@ -1852,7 +1852,7 @@ const menuData = [
         dinner: ["Maggi Noodles","Tomato Sauce","Brinji Rice","Raitha","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
       },
       {
-        week : "4",
+        week : "3",
         day : "Sunday",
         breakfast : ["Poori","Aloo/Channa Masala"],
         lunch : ["Veg Fried Rice","Mix Veg Manchurian","White Rice","Dhall & Ghee","Aloo Kara Curry","Tomato Rasam","Buttermilk","Appalam","Pickle","Vermicelli Payasam/Fruit Salad"],
