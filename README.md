@@ -5,6 +5,7 @@ API Endpoints:
  - /login: To get register number, password and captcha from user and login (POST)
  - /profile: To fetch name, register number, course and current semester and display under profile section (POST)
  - /profilePic: To fetch profile picture (POST)
+ - /grievances: To submit grievances (POST)
  - /attendance: To fetch the overall attendance and display in home page (POST)
  - /sastraDue: To fetch the total SASTRA fee due (POST)
  - /hostelDue: To fetch the total Hostel fee due (POST)

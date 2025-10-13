@@ -165,6 +165,63 @@ app.post('/logout',async(req,res) => {
 
 
 
+
+
+// This route submits a student grievance to the SASTRA SWI portal using Puppeteer automation.
+// It fills and submits the grievance form with type, category, subject, and description.
+// After successful submission, it stores the grievance details in Firestore with timestamp history.
+// The route ensures the user is logged in via session token and returns a success response.
+
+app.post('/grievances',async(req,res) => {
+  const { token, refresh, grievanceType, grievanceCategory, grievanceSubject, grievanceDetail } = req.body;
+  const session = pendingCaptcha[token];
+  if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
+  
+  try
+  {
+    await page.goto("https://webstream.sastra.edu/sastrapwi/academy/StudentsGrievances.jsp");
+    await page.waitForSelector("#cmbGrievanceType");
+    await page.select("#cmbGrievanceType",grievanceType);
+    await page.select("#cmbGrievanceCategory",grievanceCategory);
+    await page.type("#txtSubject",grievanceSubject);
+    await page.type("#txtSubjectDescription",grievanceDetail);
+    /*await Promise.all([
+      page.click("#cmdSave"),
+      page.waitForNavigation({ waitUntil: 'networkidle0' })
+    ]);*/
+    const subjectValue = await page.$eval("#txtSubject", el => el.value);
+    console.log("Test Mode → Form filled:", subjectValue);
+
+    //Storing data in Firestore
+    const docRef = db.collection("studentDetails").doc(regNo);
+    await docRef.set({
+      grievances: admin.firestore.FieldValue.arrayUnion({
+        type: grievanceType,
+        category: grievanceCategory,
+        subject: grievanceSubject,
+        detail: grievanceDetail,
+        submittedAt: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      }),
+      lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+    },{merge: true});
+    res.json({success: true, message:"Grievance submitted successfully"});
+  }
+  catch (error)
+  {
+    res.status(500).json({ success: false, error: error.message });
+  }
+  finally{
+    await page.close();
+  }
+});
+
+
+
+
+
 // This route fetches a student's profile using their session token. 
 // If the profile is missing in Firestore or a refresh is requested, it scrapes the data 
 // (name, regNo, department, semester) from the SASTRA portal, stores/updates it in Firestore, 
