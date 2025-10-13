@@ -173,8 +173,8 @@ app.post('/logout',async(req,res) => {
 // The route ensures the user is logged in via session token and returns a success response.
 
 app.post('/grievances',async(req,res) => {
-  const { token, refresh, grievanceType, grievanceCategory, grievanceSubject, grievanceDetail } = req.body;
-  const session = pendingCaptcha[token];
+  const { token, grievanceType, grievanceCategory, grievanceSubject, grievanceDetail } = req.body;
+  const session = userSessions[token];
   if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -188,12 +188,10 @@ app.post('/grievances',async(req,res) => {
     await page.select("#cmbGrievanceCategory",grievanceCategory);
     await page.type("#txtSubject",grievanceSubject);
     await page.type("#txtSubjectDescription",grievanceDetail);
-    /*await Promise.all([
+    await Promise.all([
       page.click("#cmdSave"),
       page.waitForNavigation({ waitUntil: 'networkidle0' })
-    ]);*/
-    const subjectValue = await page.$eval("#txtSubject", el => el.value);
-    console.log("Test Mode → Form filled:", subjectValue);
+    ]);
 
     //Storing data in Firestore
     const docRef = db.collection("studentDetails").doc(regNo);
