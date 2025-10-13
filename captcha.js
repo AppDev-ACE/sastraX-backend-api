@@ -706,6 +706,138 @@ app.post('/semGrades', async (req,res) => {
 
 
 
+
+// This route fetches a student's internal marks using their session token. 
+// If not found in Firestore or if refresh is requested, it scrapes the marks table 
+// (with subjectCode, subjectName, totalCIAMarks), 
+// stores/updates it in Firestore, and returns it. Otherwise, it serves the cached data from Firestore.
+
+app.post('/internalMarks', async (req,res) => {
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
+    try
+    {
+      //Storing internal marks in Firestore
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().internalMarks)
+      {
+          await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=22");
+          const marksData = await page.evaluate(() => {
+            const table = document.querySelectorAll("table");
+            if (!table)
+              return "No records found";
+            const tbody = table[0].querySelector("tbody");
+            const rows = Array.from(tbody.getElementsByTagName("tr"));
+            const marks = [];
+            for (let i=2;i<rows.length;i++)
+            {
+              const columns = rows[i].getElementsByTagName("td");
+              marks.push({
+                subjectCode : columns[0]?.innerText?.trim(),
+                subjectName : columns[1]?.innerText?.trim(),
+                totalCIAMarks : columns[2]?.innerText?.trim(),
+              });
+            }
+            return marks;
+          });
+          
+          await docRef.set({
+            internalMarks : marksData,
+            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+          },{merge:true});
+          res.json({success: true,marksData});
+      }
+      else
+      {
+        res.json({success: true,internalMarks: doc.data().internalMarks});
+      }
+    }
+    catch(error)
+    {
+      res.status(500).json({ sucess:false, message: "Failed to fetch internal marks", error: error.message });
+    }
+    finally{
+      await page.close();
+    }
+});
+
+
+
+
+
+
+
+
+
+app.post('/ciaWiseInternalMarks', async (req,res) => {
+    let { token,refresh } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
+    try
+    {
+      //Storing internal marks in Firestore
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().ciaWiseInternalMarks)
+      {
+          await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=22");
+          const marksData = await page.evaluate(() => {
+            const table = document.querySelectorAll("table");
+            if (!table)
+              return "No records found";
+            const tbody = table[1].querySelector("tbody");
+            const rows = Array.from(tbody.getElementsByTagName("tr"));
+            const marks = [];
+            for (let i=2;i<rows.length;i++)
+            {
+              const columns = rows[i].getElementsByTagName("td");
+              marks.push({
+                subjectCode : columns[0]?.innerText?.trim(),
+                subjectName : columns[1]?.innerText?.trim(),
+                component : columns[2]?.innerText?.trim(),
+                marksObtained : columns[3]?.innerText?.trim(),
+                maxMarks : columns[4]?.innerText?.trim(),
+              });
+            }
+            return marks;
+          });
+          
+          await docRef.set({
+            ciaWiseInternalMarks : marksData,
+            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+          },{merge:true});
+          res.json({success: true,marksData});
+      }
+      else
+      {
+        res.json({success: true,ciaWiseInternalMarks: doc.data().ciaWiseInternalMarks});
+      }
+    }
+    catch(error)
+    {
+      res.status(500).json({ sucess:false, message: "Failed to fetch cia-wise internal marks", error: error.message });
+    }
+    finally{
+      await page.close();
+    }
+});
+
+
+
+
+
+
+
 // This route fetches a student's status(Dayscholar/Hosteller) using their session token. 
 // If not found in Firestore or if refresh is requested, it scrapes the student status table 
 // (specifically the status row), stores/updates it in Firestore, and returns it. 

@@ -14,6 +14,8 @@ API Endpoints:
  - /currentSemCredits: To fetch the credits of current semester courses (POST) 
  - /bunk: To calculate bunks (POST)
  - /semGrades: To fetch semester-wise grades and credits (POST)
+ - /internalMarks: To fetch total internal marks (POST)
+ - /ciaWiseInternalMarks: To fetch cia-wise internal marks (POST)
  - /studentStatus: To fetch student status - Hosteler/Dayschloar (POST)
  - /sgpa: To fetch SGPA sem-wise (POST)
  - /cgpa: To fetch overall CGPA (POST)
