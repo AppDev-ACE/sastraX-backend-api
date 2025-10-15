@@ -22,6 +22,7 @@ API Endpoints:
  - /pyq: To fetch department-wise PYQs (GET)
  - /chatbot: To fetch PYQs based on text(input message) in community chat (POST)
  - /facultyList: To fetch faculty list (POST)
+ - /courseMap: To fetch course name for corresponding course code (POST)
  - /timetable: To fetch timetable (POST)
  - /messMenu: To fetch mess menu (GET)
 

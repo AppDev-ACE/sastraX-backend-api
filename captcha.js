@@ -1323,17 +1323,16 @@ app.post('/timetable', async  (req,res) => {
 
 
 
-// POST /timetableBunk
+// POST /courseMap
 // - Validates user session using token.
-// - Checks Firestore for existing timetable (or refresh flag).
+// - Checks Firestore for existing courseMap (or refresh flag).
 // - If missing or refresh requested:
 //     • Navigates to student timetable page.
-//     • Scrapes day-wise timetable slots, cleaning cell values
-//       (removes extra text after commas, defaults to "N/A").
-//     • Stores timetable in Firestore with timestamp.
-// - Returns cached timetable if available.
+//     • Scrapes courseMap
+//     • Stores courseMap in Firestore with timestamp.
+// - Returns cached courseMap if available.
 
-app.post('/timetableBunk', async  (req,res) => {
+app.post('/courseMap', async  (req,res) => {
     let { token,refresh } = req.body;
     const session = userSessions[token];
     if (!session) 
@@ -1346,55 +1345,39 @@ app.post('/timetableBunk', async  (req,res) => {
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
 
-      if (!doc.exists || refresh || !doc.data().timetable)
+      if (!doc.exists || refresh || !doc.data().courseMap)
       { 
           await page.goto("https://webstream.sastra.edu/sastrapwi/academy/frmStudentTimetable.jsp");
-          const timeTable = await page.evaluate(() => {
+          const courseMap = await page.evaluate(() => {
             const tables = document.querySelectorAll("table");
-            const timetableTable = tables[1]; 
+            const timetableTable = tables[2]; 
             if (!timetableTable) return null;
-            const rows = timetableTable.querySelectorAll("tbody tr");
-            const data = [];
-
-            const cleanCell = (cell) => {
-            const text = cell.innerText.trim();
-            return text ? text.split(",")[0].trim() : "N/A";
-            }
-
-            for (let i = 2; i < rows.length; i++) 
-            { 
-              const cells = rows[i].querySelectorAll("td");
-              if (cells.length < 12) continue;
-              data.push({
-                day : cells[0].innerText.trim(),
-                "08:45 - 09:45" : cleanCell(cells[1]),
-                "09:45 - 10:45" : cleanCell(cells[2]),
-                "10:45 - 11:00" : "Break",
-                "11:00 - 12:00" : cleanCell(cells[3]),
-                "12:00 - 01:00" : cleanCell(cells[4]),
-                "01:00 - 02:00" : cleanCell(cells[5]),
-                "02:00 - 03:00" : cleanCell(cells[6]),
-                "03:00 - 03:15" : "Break",
-                "03:15 - 04:15" : cleanCell(cells[7]),
-                "04:15 - 05:15" : cleanCell(cells[8]),
-                "05:30 - 06:30" : cleanCell(cells[9]),
-                "06:30 - 07:30" : cleanCell(cells[10]),
-                "07:30 - 08:30" : cleanCell(cells[11])
+            const tbody = timetableTable.querySelector("tbody");
+            const rows = Array.from(tbody.getElementsByTagName("tr"));
+            const courseMap = [];
+            for (let i=1;i<rows.length;i++)
+            {
+              const columns = rows[i].getElementsByTagName("td");
+              courseMap.push({
+                courseCode : columns[0]?.innerText?.trim(),
+                courseName : columns[1]?.innerText?.trim(),
+                section : columns[2]?.innerText?.trim(),
+                faculty : columns[3]?.innerText?.trim(),
+                venue : columns[4]?.innerText?.trim()
               });
-
             }
-          return data.length ? data : null;
+            return courseMap;
         });
         
         await docRef.set({
-            timetable : timeTable,
+            courseMap : courseMap,
             lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
           },{merge:true});
-          res.json({success: true,timeTable});
+          res.json({success: true,courseMap});
       }
       else
       {
-        res.json({success: true,timetable: doc.data().timetable});
+        res.json({success: true,courseMap: doc.data().courseMap});
       }
   }
   catch(error)
@@ -1439,8 +1422,12 @@ const daysPerSem = {
 // 6. Returns a structured JSON with per-day, weekly, semester, and 20% bunk info
 
 app.post('/bunk', async (req, res) => {
-  let { regNo } = req.body;
-  regNo = "Register No. " + regNo;
+  let { token } = req.body;
+    const session = userSessions[token];
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
 
   try {
     const docRef = db.collection("studentDetails").doc(regNo);
