@@ -718,8 +718,11 @@ app.post('/hourWiseAttendance',async (req,res) => {
       //Storing hour-wise attendance in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
       const doc = await docRef.get();
+      
+      const docRef1 = db.collection("OD").doc(regNo);
+      const doc1 = await docRef1.get();
 
-      if (!doc.exists || refresh || !doc.data().hourWiseAttendance)
+      if (!doc.exists || !doc1.exists || refresh || !doc.data().hourWiseAttendance || !doc1.data().hourWiseAttendance)
       {
         await page.goto("https://webstream.sastra.edu/sastrapwi/academy/studentHourWiseAttendance.jsp");
         const hourWiseAttendance = await page.evaluate(() => {
@@ -746,6 +749,13 @@ app.post('/hourWiseAttendance',async (req,res) => {
             }
             return attendance;
         });
+        //Adding to OD
+        await docRef1.set({
+          hourWiseAttendance : hourWiseAttendance,
+          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        },{merge:true});
+
+        //Adding to usual student details
         await docRef.set({
           hourWiseAttendance : hourWiseAttendance,
           lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
