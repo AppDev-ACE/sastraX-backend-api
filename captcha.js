@@ -13,7 +13,7 @@ admin.initializeApp({
   credential: admin.credential.cert({
     projectId: serviceAccount.project_id,
     clientEmail: serviceAccount.client_email,
-    privateKey: serviceAccount.private_key.replace(/\\n/g, '\n'), // ✅ now works
+    privateKey: serviceAccount.private_key.replace(/\\n/g, '\n'),
   }),
 });
 
@@ -117,8 +117,19 @@ app.post('/login', async (req, res) => {
 
     const token = uuidv4();
     userSessions[token] = { regNo, context };
+    let cookies = await page.cookies();
+    cookies = cookies.map(({ name, value, domain, path, expires, httpOnly, secure }) => ({
+      name,
+      value,
+      domain,
+      path,
+      expires,
+      httpOnly,
+      secure
+    }));
     await db.collection("activeSessions").doc(token).set({
         regNo,
+        cookies,
         createdAt: new Date().toISOString()
     });
     return res.json({ success: true, message: "Login successful!", token });
@@ -165,6 +176,39 @@ app.post('/logout',async(req,res) => {
 
 
 
+// This is a helper function to check whether the token is available in the firebase or not.
+// If it is available, the user is already logged in. If not, user has to login again.
+
+async function getSessionsByToken(token){
+  let session = userSessions[token];
+  if (session)
+    return session;
+  const doc = await db.collection("activeSessions").doc(token).get();
+  if (!doc.exists)
+    return null;
+  
+  const data = doc.data();
+  const context = await browser.createBrowserContext();
+  const page = await context.newPage();
+
+  await page.goto("https://webstream.sastra.edu/sastrapwi/", { waitUntil: "domcontentloaded" });
+
+  if (data.cookies){
+    await page.setCookie(...data.cookies);
+  }
+
+  userSessions[token] = {
+    regNo: data.regNo,
+    context
+  };
+  await page.close();
+  return userSessions[token];
+}
+
+
+
+
+
 
 
 // This route submits a student grievance to the SASTRA SWI portal using Puppeteer automation.
@@ -174,7 +218,7 @@ app.post('/logout',async(req,res) => {
 
 app.post('/grievances',async(req,res) => {
   const { token, grievanceType, grievanceCategory, grievanceSubject, grievanceDetail } = req.body;
-  const session = userSessions[token];
+  const session = await getSessionsByToken(token);
   if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -227,7 +271,7 @@ app.post('/grievances',async(req,res) => {
 
 app.post('/profile', async (req, res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -290,7 +334,7 @@ app.post('/profile', async (req, res) => {
 
 app.post('/profilePic', async(req, res) => {
   let { token,refresh } = req.body;
-  const session = userSessions[token];
+  const session = await getSessionsByToken(token);
   if (!session) 
     return res.status(401).json({ success: false, message: "User not logged in" });
   const { regNo, context } = session;
@@ -348,7 +392,7 @@ app.post('/profilePic', async(req, res) => {
 
 app.post('/attendance',async (req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -397,7 +441,7 @@ app.post('/attendance',async (req,res) => {
 
 app.post('/sastraDue',async (req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -455,54 +499,75 @@ app.post('/sastraDue',async (req,res) => {
 // from the hostel fee due page, stores/updates it in Firestore, and returns it. 
 // Otherwise, it serves the cached due amount from Firestore.
 
-app.post('/hostelDue',async (req,res) => {
-    let { token,refresh } = req.body;
-    const session = userSessions[token];
-    if (!session) 
-      return res.status(401).json({ success: false, message: "User not logged in" });
-    const { regNo, context } = session;
-    const page = await context.newPage();
-    try
-    {
-      //Storing hostel due in Firestore
-      const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
+app.post('/hostelDue', async (req, res) => {
+  let { token, refresh } = req.body;
+  const session = await getSessionsByToken(token);
 
-      if (!doc.exists || refresh || !doc.data().hostelDue)
-      {
-          await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=2");
-          const totalHostelDue = await page.evaluate(() => {
-            const table = document.querySelector("table");
-            if (!table)
-                return "No records found";
-            const tbody = table.querySelector("tbody"); 
-            const rows = Array.from(tbody.getElementsByTagName("tr")); 
-            for (const row of rows)
-            {
-              const columns = row.getElementsByTagName("td"); 
-              if (columns[0].innerText === "Total :")
-                return columns[1]?.innerText || "No records found";
-            }
-          });
-          
-          await docRef.set({
-            hostelDue : totalHostelDue,
-            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-          },{merge:true});
-          res.json({success: true,totalHostelDue});
-      }
-      else
-      {
-        res.json({success: true,hostelDue: doc.data().hostelDue});
-      }
+  if (!session)
+    return res.status(401).json({ success: false, message: "User not logged in" });
+
+  const { regNo, context } = session;
+  const page = await context.newPage();
+
+  try {
+    const docRef = db.collection("studentDetails").doc(regNo);
+    const doc = await docRef.get();
+
+    // Fetch from website if first time or refresh required
+    if (!doc.exists || refresh || !doc.data().hostelDue) {
+      await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=2");
+
+      const data = await page.evaluate(() => {
+        const table = document.querySelector("table");
+        if (!table) return { hostelDue: [], totalDue: "No total found" };
+
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+
+        let hostelDue = [];
+        let totalDue = "No total found";
+
+        for (let i = 2; i < rows.length; i++) {
+          const columns = rows[i].getElementsByTagName("td");
+          const firstCol = columns[0]?.innerText?.trim();
+
+          if (firstCol === "Total :" || firstCol === "Total:") {
+            totalDue = columns[1]?.innerText?.trim() || "No total found";
+          } else {
+            hostelDue.push({
+              sem: columns[1]?.innerText?.trim() || "",
+              feeDetails: columns[2]?.innerText?.trim() || "",
+              dueDate: columns[3]?.innerText?.trim() || "",
+              dueAmount: columns[4]?.innerText?.trim() || "",
+            });
+          }
+        }
+
+        return { hostelDue, totalDue };
+      });
+
+      // Save to Firestore
+      await docRef.set({
+        hostelDue: data.hostelDue,
+        totalDue: data.totalDue,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      }, { merge: true });
+
+      res.json({ success: true, ...data });
+    } else {
+      // Load from Firestore
+      res.json({
+        success: true,
+        hostelDue: doc.data().hostelDue,
+        totalDue: doc.data().totalDue
+      });
     }
-    catch(error)
-    {
-      res.status(500).json({ success: false, message: "Failed to fetch due amount", error: error.message });
-    }
-    finally{
-      await page.close();
-    }
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to fetch due amount", error: error.message });
+  } finally {
+    await page.close();
+  }
 });
 
 
@@ -517,7 +582,7 @@ app.post('/hostelDue',async (req,res) => {
 
 app.post('/subjectWiseAttendance',async (req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -575,7 +640,7 @@ app.post('/subjectWiseAttendance',async (req,res) => {
 
 app.post('/hourWiseAttendance',async (req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -645,7 +710,7 @@ app.post('/hourWiseAttendance',async (req,res) => {
 
 app.post('/semGrades', async (req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -714,7 +779,7 @@ app.post('/semGrades', async (req,res) => {
 
 app.post('/internalMarks', async (req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -777,7 +842,7 @@ app.post('/internalMarks', async (req,res) => {
 
 app.post('/ciaWiseInternalMarks', async (req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -845,7 +910,7 @@ app.post('/ciaWiseInternalMarks', async (req,res) => {
 
 app.post('/studentStatus', async(req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -911,7 +976,7 @@ app.post('/studentStatus', async(req,res) => {
 
 app.post('/sgpa', async(req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -976,7 +1041,7 @@ app.post('/sgpa', async(req,res) => {
 
 app.post('/cgpa', async(req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -1044,7 +1109,7 @@ app.post('/cgpa', async(req,res) => {
 
 app.post('/dob', async(req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -1109,7 +1174,7 @@ app.post('/dob', async(req,res) => {
 
 app.post('/facultyList', async  (req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -1184,7 +1249,7 @@ app.post('/facultyList', async  (req,res) => {
 
 app.post('/currentSemCredits',async (req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -1254,7 +1319,7 @@ app.post('/currentSemCredits',async (req,res) => {
 
 app.post('/timetable', async  (req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -1334,7 +1399,7 @@ app.post('/timetable', async  (req,res) => {
 
 app.post('/courseMap', async  (req,res) => {
     let { token,refresh } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -1423,7 +1488,7 @@ const daysPerSem = {
 
 app.post('/bunk', async (req, res) => {
   let { token } = req.body;
-    const session = userSessions[token];
+    const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
@@ -1986,7 +2051,7 @@ const menuData = [
         dinner: ["Chappathi","Aloo Mutter Masala","Rava Upma","Sambar","Coconut Chutney","Curd Rice","Pickle","Banana (1 No)"] 
       },
       {
-        week : "4",
+        week : "3",
         day : "Tuesday",
         breakfast : ["Idly","Carrot Beans Sambar","Peanut Chutney","Podi with Oil","BBJ"],
         lunch : ["Chappathi","White Kuruma","White Rice","Raddish Sambar","Cabbage Peas Poriyal","Masala Vada","Dhall Rasam","Curd","Fryums","Pickle"],
