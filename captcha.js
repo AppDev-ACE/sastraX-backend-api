@@ -575,6 +575,74 @@ app.post('/hostelDue', async (req, res) => {
 
 
 
+
+// This route fetches a student's fee collections using their session token. 
+// If the fee collections are missing in Firestore or refresh is requested, it scrapes the value 
+// from the fee collections page, stores/updates it in Firestore, and returns it. 
+// Otherwise, it serves the cached fee collections from Firestore.
+
+app.post('/feeCollections',async (req,res) => {
+    let { token,refresh } = req.body;
+    const session = await getSessionsByToken(token);
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
+    try
+    {
+      //Storing fee collections in Firestore
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().feeCollections)
+      {
+        await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=12");
+        const feeCollections = await page.evaluate(() => { 
+          const table = document.querySelector("table");
+          if (!table)
+              return "No records found";
+          const tbody = table.querySelector("tbody");
+          const rows = Array.from(tbody.getElementsByTagName("tr"));
+          const feeCollections = [];
+          for (let i=2;i<rows.length-2;i++)
+          {
+            const columns = rows[i].getElementsByTagName("td"); 
+            feeCollections.push({
+                semester: columns[0]?.innerText?.trim(),
+                institution: columns[1]?.innerText?.trim(),
+                particulars: columns[2]?.innerText?.trim(),
+                amountCollected: columns[3]?.innerText?.trim(),
+                collectedDate: columns[4]?.innerText?.trim()
+            });
+          }
+          return feeCollections;
+        });
+        await docRef.set({
+          feeCollections : feeCollections,
+          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        },{merge:true});
+        res.json({ success: true, feeCollections });
+      }
+      else
+      {
+        res.json({ success: true, feeCollections: doc.data().feeCollections});
+      }
+    }
+    catch(error)
+    {
+      res.status(500).json({ success: false, message: "Failed to fetch fee collections", error: error.message });
+    }
+    finally{
+      await page.close();
+    }
+});
+
+
+
+
+
+
+
 // This route fetches a student's subject-wise attendance using their session token. 
 // If not found in Firestore or if refresh is requested, it scrapes the subject-wise attendance table 
 // (with subject code, name, total hours, present, absent, and percentage), stores/updates it in Firestore, 
