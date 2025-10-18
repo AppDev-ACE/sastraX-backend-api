@@ -4,6 +4,9 @@ const puppeteer = require('puppeteer');
 const { v4: uuidv4 } = require('uuid'); 
 const path = require('path');
 const cors = require('cors');
+const crypto = require('crypto');
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+const IV_LENGTH = 16;
 const admin = require('firebase-admin');
 const cloudinary = require('cloudinary').v2;
 
@@ -31,13 +34,33 @@ cloudinary.config({
 });
 
 
+//Encryption of password using aes-256-cbc algorithm
+function encrypt(text) {
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY,'hex'), iv);
+  let encrypted = cipher.update(text, 'utf-8');
+  encrypted = Buffer.concat([encrypted, cipher.final()]);
+  return iv.toString('hex') + ':' + encrypted.toString('hex');
+}
+
+//Decryption of password using aes-256-cbc algorithm
+function decrypt(text) {
+  const parts = text.split(':');
+  const iv = Buffer.from(parts.shift(), 'hex');
+  const encryptedText = Buffer.from(parts.join(':'), 'hex');
+  const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY,'hex'), iv);
+  let decrypted = decipher.update(encryptedText);
+  decrypted = Buffer.concat([decrypted, decipher.final()]);
+  return decrypted.toString('utf-8');
+}
+
+
 let browser;
 (async () => {
   browser = await puppeteer.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'], //to host publicly
   });
-  console.log("Puppeteer launched, starting server...");
   app.listen(3000, () => console.log("Server running on port 3000"));
 })();
 
@@ -117,19 +140,13 @@ app.post('/login', async (req, res) => {
 
     const token = uuidv4();
     userSessions[token] = { regNo, context };
-    let cookies = await page.cookies();
-    cookies = cookies.map(({ name, value, domain, path, expires, httpOnly, secure }) => ({
-      name,
-      value,
-      domain,
-      path,
-      expires,
-      httpOnly,
-      secure
-    }));
+    await db.collection("users").doc(regNo).set({
+      regNo: regNo,
+      password: encrypt(pwd),
+      createdAt: new Date()
+    });
     await db.collection("activeSessions").doc(token).set({
         regNo,
-        cookies,
         createdAt: new Date().toISOString()
     });
     return res.json({ success: true, message: "Login successful!", token });
@@ -175,6 +192,57 @@ app.post('/logout',async(req,res) => {
 
 
 
+app.post('/relogin',async(req,res) => {
+    let { token, captcha } = req.body;
+    const session = await getSessionsByToken(token);
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+
+    const { regNo, context } = session;
+    const page = await context.newPage();
+    await page.goto("https://webstream.sastra.edu/sastrapwi/", { waitUntil: "domcontentloaded" });
+
+    const doc = await db.collection("users").doc(regNo).get();        
+    const password = decrypt(doc.data().password);
+
+    try {
+      await page.type("#txtRegNumber", regNo);
+      await page.type("#txtPwd", password);
+      await page.type("#answer", captcha);
+
+      await Promise.all([
+        page.click('input[type="button"]'),
+        page.waitForNavigation({ waitUntil: 'networkidle0' })
+      ]);
+
+      const loginFailed = await page.$('.ui-state-error');
+      if (loginFailed) {
+        const msg = await page.evaluate(el => (el.textContent || "Login failed").trim(), loginFailed);
+        await context.close().catch(() => {});
+        return res.status(401).json({ success: false, message: msg });
+      }
+
+      const newtToken = uuidv4();
+      userSessions[newtToken] = { regNo, context };
+      return res.json({ success: true, message: "Academic Details Updated", newtToken });
+
+    } 
+    catch(err) 
+    {
+      await context.close().catch(() => {});
+      return res.status(500).json({ success: false, message: "Relogin failed", error: err?.message || String(err) });
+    } 
+    finally 
+    {
+      delete pendingCaptcha[regNo];
+      await page.close();
+    }
+});
+
+
+
+
+
 
 // This is a helper function to check whether the token is available in the firebase or not.
 // If it is available, the user is already logged in. If not, user has to login again.
@@ -193,15 +261,10 @@ async function getSessionsByToken(token){
 
   await page.goto("https://webstream.sastra.edu/sastrapwi/", { waitUntil: "domcontentloaded" });
 
-  if (data.cookies){
-    await page.setCookie(...data.cookies);
-  }
-
   userSessions[token] = {
     regNo: data.regNo,
     context
   };
-  await page.close();
   return userSessions[token];
 }
 
@@ -264,6 +327,70 @@ app.post('/grievances',async(req,res) => {
 
 
 
+// This route submits a student leave application to the SASTRA SWI portal using Puppeteer automation.
+// It fills and submits the leave form with type, from date, to date, no. of days and reason.
+// After successful submission, it stores the leave details in Firestore with timestamp history.
+// The route ensures the user is logged in via session token and returns a success response.
+
+app.post('/leaveApplication',async(req,res) => {
+  const { token, leaveType, fromDate, toDate, noOfDays, reason } = req.body;
+  const session = await getSessionsByToken(token);
+  if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
+  
+  try
+  {
+    await page.goto("https://webstream.sastra.edu/sastrapwi/academy/HostelStudentLeaveApplication.jsp");
+    await page.waitForSelector("#txtLeaveType");
+    await page.select("#txtLeaveType",leaveType);
+    await page.click("#txtFromDate", { clickCount: 3 });
+    await page.type("#txtFromDate", fromDate);
+    await page.click("#txtToDate", { clickCount: 3 });
+    await page.type("#txtToDate", toDate);
+    await page.click("#txtNoofDays", { clickCount: 3 });
+    await page.type("#txtNoofDays",noOfDays);
+    await page.type("#txtReason",reason);
+    await page.screenshot({ path: `leave_preview_${regNo}.png`, fullPage: true });
+    res.json({ 
+      success: true, 
+      message: "Form filled successfully (Screenshot Taken). Not submitted.",
+      screenshot: `leave_preview_${regNo}.png`
+    });
+    /*await Promise.all([
+      page.click("#btSubmit"),
+      page.waitForNavigation({ waitUntil: 'networkidle0' })
+    ]);
+
+    //Storing data in Firestore
+    const docRef = db.collection("studentDetails").doc(regNo);
+    await docRef.set({
+      leaveForm: admin.firestore.FieldValue.arrayUnion({
+        leaveType: leaveType,
+        fromDate: fromDate,
+        toDate: toDate,
+        noOfDays: noOfDays,
+        reason: reason,
+        submittedAt: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      }),
+      lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+    },{merge: true});
+    res.json({success: true, message:"Leave applied successfully"});*/
+  }
+  catch (error)
+  {
+    res.status(500).json({ success: false, error: error.message });
+  }
+  finally{
+    await page.close();
+  }
+});
+
+
+
+
+
 // This route fetches a student's profile using their session token. 
 // If the profile is missing in Firestore or a refresh is requested, it scrapes the data 
 // (name, regNo, department, semester) from the SASTRA portal, stores/updates it in Firestore, 
@@ -282,7 +409,7 @@ app.post('/profile', async (req, res) => {
       await page.waitForSelector('img[alt="Photo not found"]');
 
       //Storing data in Firestore
-      const docRef = db.collection("studentDetails").doc(regNo);
+      const docRef = db.collection("studentDetails").doc(regNo);        
       const doc = await docRef.get();
       if (!doc.exists || refresh || !doc.data().profile)
       {
@@ -1198,7 +1325,7 @@ app.post('/cgpa', async(req,res) => {
       { 
           await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
           const cgpaData = await page.evaluate(() => {
-            const table = document.querySelector('table');
+            const table = document.querySelector('table', { timeout: 10000 });
             if (!table)
               return "No records found";
             const tbody = table.querySelector("tbody");
@@ -1219,7 +1346,7 @@ app.post('/cgpa', async(req,res) => {
             cgpa : cgpaData,
             lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
           },{merge:true});
-          res.json({success: true,cgpaData});
+          res.json({success: true,cgpa: cgpaData});
       }
       else
       {
@@ -1229,7 +1356,7 @@ app.post('/cgpa', async(req,res) => {
     }
     catch (error)
     {
-      res.status(500).json({ success: false, meassage: "Failed to fetch CGPA", error: error.meassage });
+      res.status(500).json({ success: false, meassage: "Failed to fetch CGPA", error: error.message });
     }
     finally{
       await page.close();
@@ -1996,6 +2123,239 @@ app.get('/pyq', async(req,res) => {
       {
         dept : "mechanical",
         url : "https://drive.google.com/drive/folders/1ANgc0gyCdwLrVEjirxkguA8f7azEL6PU"
+      },
+    ]);
+});
+
+
+
+
+
+
+
+
+// GET /materials
+// Returns the list of materials as Drive links
+// Each entry has a 'dept' name and corresponding Drive 'url'
+
+app.get('/materials', async(req,res) => {
+    return res.json([
+
+      //SEM 1
+      {
+        dept : "alldept",
+        url : "https://drive.google.com/drive/folders/1hsEFhsA27jZWcD76U3-dnijXcphFoYYZ"
+      },
+
+       //SEM 2
+      {
+        dept : "alldept",
+        url : "https://drive.google.com/drive/folders/1hsEFhsA27jZWcD76U3-dnijXcphFoYYZ"
+      },
+
+      //SEM 3
+      {
+        dept : "aerospace3",
+        url : "https://drive.google.com/drive/folders/1AIchr0eSIq27tmshWsrXZPi3HBbhmbOG"
+      },
+      {
+        dept : "biotech3",
+        url : "https://drive.google.com/drive/folders/1-3qFdM2VU40JXa7lFZqsw69q4gu-luH4"
+      },
+      {
+        dept : "cse3",
+        url : "https://drive.google.com/drive/folders/1JWzazYiV3ry7IeadbJs5xCnrlOIHetB1"
+      },
+      {
+        dept : "civil3",
+        url : "https://drive.google.com/drive/u/0/folders/1_LZnVyPq6pbLw7eri7kiD3_wixyrTxfe"
+      },
+      {
+        dept : "iot3",
+        url : "https://drive.google.com/drive/u/0/folders/1JWzazYiV3ry7IeadbJs5xCnrlOIHetB1"
+      },
+      {
+        dept : "ict3",
+        url : "https://drive.google.com/drive/folders/1TyQOKdgIqizo4p6YZ-0v75CjBvl1VWkC"
+      },
+      {
+        dept : "it3",
+        url : "https://drive.google.com/drive/folders/1TyQOKdgIqizo4p6YZ-0v75CjBvl1VWkC"
+      },
+      {
+        dept : "ece3",
+        url : "https://drive.google.com/drive/u/0/folders/19U7wFLtcwEg3JOc98JzoHeAQQwYWwlrf"
+      },
+      {
+        dept : "eee3",
+        url : "https://drive.google.com/drive/u/0/folders/19RmmtxCWEYgO4p2Ym962wFUrwCGB1XeB"
+      },
+      {
+        dept : "eie3",
+        url : "https://drive.google.com/drive/folders/1rc8Y4MgMX9e5yt1RnKCCisorxM9hN2Al"
+      }, 
+      {
+        dept : "mechanical3",
+        url : "https://drive.google.com/drive/u/0/folders/1BA9RYB2UU86K7vOvuLkzDwr2NUKCVDTf"
+      }, 
+      {
+        dept : "mechatronics3",
+        url : "https://drive.google.com/drive/folders/1emJWtfXo91SsiQx0Bfn5OIlLCZynhVrW"
+      },
+
+      //SEM 4
+      {
+        dept : "aerospace4",
+        url : "https://drive.google.com/drive/folders/1Gmem7ecw2Tr-wHWyJGLECSjt-w6_guI0"
+      },
+      {
+        dept : "biotech4",
+        url : "https://drive.google.com/drive/folders/1Nl3vIiQqnlwIaUURJORV3bSPuHmhtffv"
+      },
+      {
+        dept : "cse4",
+        url : "https://drive.google.com/drive/u/0/folders/1Cf5eIhCt_lXO6jLu6ox0ixEHSOML3S1R"
+      },
+      {
+        dept : "civil4",
+        url : "https://drive.google.com/drive/u/0/folders/1_RNdBi7G_mXyfKcWLDfYut8RJbQadLOu"
+      },
+      {
+        dept : "iot4",
+        url : "https://drive.google.com/drive/u/0/folders/1t35bYgiEnu84OMtbeWPmiIKi9ysDE-D-"
+      },
+      {
+        dept : "ict4",
+        url : "https://drive.google.com/drive/folders/1CD4Mm7xGd5PrAFO-MyJKReoIdcqrozI6"
+      },
+      {
+        dept : "it4",
+        url : "https://drive.google.com/drive/folders/1CD4Mm7xGd5PrAFO-MyJKReoIdcqrozI6"
+      },
+      {
+        dept : "ece4",
+        url : "https://drive.google.com/drive/folders/1GEVNQAs2rv0AUcTLol5Rz-91MyMir1SO"
+      },
+      {
+        dept : "eee4",
+        url : "https://drive.google.com/drive/u/0/folders/17ZN2RFfzT4-e5m6xnHVDzdmKIyK4TNVR"
+      },
+      {
+        dept : "eie4",
+        url : "https://drive.google.com/drive/folders/1XqLBdnWxeWjjh6mHLNE1je4NcDNpCoIr"
+      }, 
+      {
+        dept : "mechanical4",
+        url : "https://drive.google.com/drive/u/0/folders/1-wo9s1lpvthH-I2agHN7QNpMFlySwwnd"
+      }, 
+      {
+        dept : "mechatronics4",
+        url : "https://drive.google.com/drive/folders/1ol-nloz1eXbNkWSg9Rwei0LJDgX6zocI"
+      },
+
+      //SEM 5
+      {
+        dept : "aerospace5",
+        url : "https://drive.google.com/drive/folders/1Avk-hLvmB5aeuoxJPENe-dpyShLm5vW9"
+      },
+      {
+        dept : "cse5",
+        url : "https://drive.google.com/drive/folders/1Zcu-2IdTx_5r8_EuSUGWai4bSjvym--L"
+      },
+      {
+        dept : "civil5",
+        url : "https://drive.google.com/drive/u/0/folders/1nl6O97RL9LKXt1mvZv8mLRLc0WXPx1UA"
+      },
+      {
+        dept : "ict5",
+        url : "https://drive.google.com/drive/folders/1Wr0ksIrG_AgHWwXSQMNHheZWdLDp5aG5"
+      },
+      {
+        dept : "it5",
+        url : "https://drive.google.com/drive/folders/1Wr0ksIrG_AgHWwXSQMNHheZWdLDp5aG5"
+      },
+      {
+        dept : "ece5",
+        url : "https://drive.google.com/drive/folders/1pxDYkjYFcLRYy0K4pzWsr6YrjYMy_xCw"
+      },
+      {
+        dept : "eee5",
+        url : "https://drive.google.com/drive/folders/1p-jZ7TPJCqrCubTSj9N_-3WfwyaF1T5K"
+      }, 
+      {
+        dept : "mechanical5",
+        url : "https://drive.google.com/drive/u/0/folders/1wp73DjhCIgGvCs2kgLzaTsUJoSqs5Svu"
+      }, 
+      {
+        dept : "mechatronics5",
+        url : "https://drive.google.com/drive/folders/1CvLsC6Ay1tS32pQdM-HBIo2UnSRFW6o4"
+      },
+
+      //SEM 6
+      {
+        dept : "aerospace6",
+        url : "https://drive.google.com/drive/folders/1Cxmvu_tmD5Pve3g57KaQ2-JX10OfvTRq"
+      },
+      {
+        dept : "cse6",
+        url : "https://drive.google.com/drive/folders/1hzgn3MGGIBkNpr7TqDUUnSJRv9toDxE3"
+      },
+      {
+        dept : "civil6",
+        url : "https://drive.google.com/drive/folders/1epvlc9E8i8NqkYZEHhZloOL3IYWpc-M4"
+      },
+      {
+        dept : "ict6",
+        url : "https://drive.google.com/drive/folders/1s54p3v3kEgvd-lpXXRQKhOtzya_fp5tI"
+      },
+      {
+        dept : "it6",
+        url : "https://drive.google.com/drive/folders/19SoaCs4aRKLBaUI0itAQFXnFcEfu8wW_"
+      },
+      {
+        dept : "ece6",
+        url : "https://drive.google.com/drive/folders/1fS0bW_RS_NFFMbjIDxgiVttbHqqeR3Uu"
+      },
+      {
+        dept : "eee6",
+        url : "https://drive.google.com/drive/folders/1-VZtrWBZLxy_fOUU1uNEnV0GK-k1kVGF"
+      }, 
+      {
+        dept : "mechanical6",
+        url : "https://drive.google.com/drive/u/0/folders/1L3WHKSokMaebWWbjrPLnf4hLVXMuLFDG"
+      }, 
+      {
+        dept : "mechatronics6",
+        url : "https://drive.google.com/drive/folders/1F3IKAbREGn3DGTFbvPzzyHoeERSzBDfK"
+      },
+
+
+      //SEM 7
+      {
+        dept : "cse7",
+        url : "https://drive.google.com/drive/folders/1k5y9UtD4NkKwMrBC4dxOkgU0iS6TOgbi"
+      },
+      {
+        dept : "civil7",
+        url : "https://drive.google.com/drive/folders/1CPP61yEqWmZn4FgAR8mo-BsBIyVE9cx8"
+      },
+      {
+        dept : "ict7",
+        url : "https://drive.google.com/drive/folders/1Avw33hD17gwuw5_vaWY5OKkoARVgJvI8"
+      },
+      {
+        dept : "mechanical7",
+        url : "https://drive.google.com/drive/u/0/folders/13KpWIWpvJ_H4IlsbvxK5KNJWqX1YVS_w"
+      }, 
+      {
+        dept : "mechatronics7",
+        url : "https://drive.google.com/drive/folders/19dQA70v4aem5TRZbiBC1ZuuQa7OMjVkS"
+      },
+
+      //LAW
+      {
+        dept : "law",
+        url : "https://drive.google.com/drive/u/0/folders/1yckeIjA2mTwTkjNm19VoCqdlx6KtYBWC"
       },
     ]);
 });
