@@ -27,4 +27,4 @@ API Endpoints:
  - /timetable: To fetch timetable (POST)
  - /messMenu: To fetch mess menu (GET)
 
-API is permanenly hosted in RENDER cloud
+API is permanenly hosted in RENDER
