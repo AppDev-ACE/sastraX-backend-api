@@ -642,6 +642,71 @@ app.post('/feeCollections',async (req,res) => {
 
 
 
+// This route fetches a student's subject-wise attendance using their session token. 
+// If not found in Firestore or if refresh is requested, it scrapes the subject-wise attendance table 
+// (with subject code, name, total hours, present, absent, and percentage), stores/updates it in Firestore, 
+// and returns it. Otherwise, it serves the cached data from Firestore.
+
+app.post('/examSchedule',async (req,res) => {
+    let { token,refresh } = req.body;
+    const session = await getSessionsByToken(token);
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+    const { regNo, context } = session;
+    const page = await context.newPage();
+    try
+    {
+      //Storing exam schedule in Firestore
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+
+      if (!doc.exists || refresh || !doc.data().examSchedule)
+      {
+        await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=23");
+        const examSchedule = await page.evaluate(() => { 
+          const table = document.querySelector("table");
+          if (!table)
+              return "No records found";
+          const tbody = table.querySelector("tbody");
+          const rows = Array.from(tbody.getElementsByTagName("tr"));
+          const examSchedule = [];
+          for (let i=2;i<rows.length-2;i++)
+          {
+            const columns = rows[i].getElementsByTagName("td"); 
+            examSchedule.push({
+                examDate: columns[0]?.innerText?.trim(),
+                examTime: columns[1]?.innerText?.trim(),
+                subCode: columns[2]?.innerText?.trim(),
+                subName: columns[3]?.innerText?.trim()
+            });
+          }
+          return examSchedule;
+        });
+        await docRef.set({
+          examSchedule : examSchedule,
+          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        },{merge:true});
+        res.json({ success: true, examSchedule });
+      }
+      else
+      {
+        res.json({ success: true, examSchedule: doc.data().examSchedule});
+      }
+    }
+    catch(error)
+    {
+      res.status(500).json({ success: false, message: "Failed to fetch attendance", error: error.message });
+    }
+    finally{
+      await page.close();
+    }
+});
+
+
+
+
+
+
 
 // This route fetches a student's subject-wise attendance using their session token. 
 // If not found in Firestore or if refresh is requested, it scrapes the subject-wise attendance table 

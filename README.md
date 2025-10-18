@@ -13,6 +13,7 @@ API Endpoints:
  - /hourWiseAttendance: To fetch hour-wise attendance (POST)
  - /currentSemCredits: To fetch the credits of current semester courses (POST) 
  - /bunk: To calculate bunks (POST)
+ - /examSchedule: To fetch the exam schedule (POST)
  - /semGrades: To fetch semester-wise grades and credits (POST)
  - /internalMarks: To fetch total internal marks (POST)
  - /ciaWiseInternalMarks: To fetch cia-wise internal marks (POST)
