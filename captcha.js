@@ -1117,62 +1117,59 @@ app.post('/sgpa', async(req,res) => {
 // 4. Returns CGPA from Firestore if already available.
 // 5. Handles errors and ensures Puppeteer page is closed.
 
-app.post('/cgpa', async (req, res) => {
-    let { token, refresh } = req.body;
+app.post('/cgpa', async(req,res) => {
+    let { token,refresh } = req.body;
     const session = await getSessionsByToken(token);
-    if (!session)
-        return res.status(401).json({ success: false, message: "User not logged in" });
-
+    if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
-
-    const docRef = db.collection("studentDetails").doc(regNo);
-    const doc = await docRef.get();
-
-    const cachedCGPA = doc.exists ? doc.data().cgpa : null;
-
-    // 1️⃣ Immediate Response to User
-    if (cachedCGPA && !refresh) {
-        return res.json({ success: true, cgpa: cachedCGPA });
-    } else if (cachedCGPA && refresh) {
-        res.json({ success: true, cgpa: cachedCGPA, message: "Refreshing CGPA in background..." });
-    } else {
-        res.json({ success: true, message: "Fetching CGPA in background..." });
+    const page = await context.newPage();
+    try
+    {
+      //Storing CGPA in Firestore
+      const docRef = db.collection("studentDetails").doc(regNo);
+      const doc = await docRef.get();
+      if (!doc.exists || refresh || !doc.data().cgpa)
+      { 
+          await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
+          const cgpaData = await page.evaluate(() => {
+            const table = document.querySelector('table');
+            if (!table)
+              return "No records found";
+            const tbody = table.querySelector("tbody");
+            const rows = Array.from(tbody.getElementsByTagName("tr"));
+            const cgpa = [];
+            for (let i=0;i<rows.length;i++)
+            {
+              const columns = rows[i].getElementsByTagName("td");
+              if (columns[0]?.innerText?.trim() === "CGPA")
+                cgpa.push({
+                  cgpa : columns[1]?.innerText?.trim()
+                });
+            }
+            return cgpa;
+          });
+          
+          await docRef.set({
+            cgpa : cgpaData,
+            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+          },{merge:true});
+          res.json({success: true,cgpaData});
+      }
+      else
+      {
+        res.json({success: true,cgpa: doc.data().cgpa});
+      }
+      
     }
-
-    // 2️⃣ Background Task (No Response Here!)
-    (async () => {
-        const page = await context.newPage();
-        try {
-            await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
-            const cgpaData = await page.evaluate(() => {
-                const table = document.querySelector('table');
-                if (!table) return "No records found";
-                const tbody = table.querySelector("tbody");
-                const rows = Array.from(tbody.getElementsByTagName("tr"));
-                const cgpa = [];
-                for (let i = 0; i < rows.length; i++) {
-                    const columns = rows[i].getElementsByTagName("td");
-                    if (columns[0]?.innerText?.trim() === "CGPA") {
-                        cgpa.push({ cgpa: columns[1]?.innerText?.trim() });
-                    }
-                }
-                return cgpa;
-            });
-
-            await docRef.set({
-                cgpa: cgpaData,
-                lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-            }, { merge: true });
-
-            console.log(`CGPA updated for ${regNo}`);
-        } catch (err) {
-            console.error("Background CGPA fetch failed:", err.message);
-        } finally {
-            await page.close();
-        }
-    })();
+    catch (error)
+    {
+      res.status(500).json({ success: false, meassage: "Failed to fetch CGPA", error: error.meassage });
+    }
+    finally{
+      await page.close();
+      }
 });
-
 
 
 
