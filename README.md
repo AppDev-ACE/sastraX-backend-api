@@ -17,7 +17,7 @@ API Endpoints:
  - /semGrades: To fetch semester-wise grades and credits (POST)
  - /internalMarks: To fetch total internal marks (POST)
  - /ciaWiseInternalMarks: To fetch cia-wise internal marks (POST)
- - /studentStatus: To fetch student status - Hosteler/Dayschloar (POST)
+ - /studentStatus: To fetch student status - Hosteler/Dayschloar & Male/Female (POST)
  - /sgpa: To fetch SGPA sem-wise (POST)
  - /cgpa: To fetch overall CGPA (POST)
  - /pyq: To fetch department-wise PYQs (GET)
