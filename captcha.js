@@ -1173,7 +1173,7 @@ app.post('/ciaWiseInternalMarks', async (req,res) => {
 
 
 
-// This route fetches a student's status(Dayscholar/Hosteller) using their session token. 
+// This route fetches a student's status(Dayscholar/Hosteller & Male/Female) using their session token. 
 // If not found in Firestore or if refresh is requested, it scrapes the student status table 
 // (specifically the status row), stores/updates it in Firestore, and returns it. 
 // Otherwise, it serves the cached status from Firestore.
@@ -1204,10 +1204,16 @@ app.post('/studentStatus', async(req,res) => {
           for (let i=0;i<rows.length;i++)
           {
             const coloumns = rows[i].getElementsByTagName("td");
+            console.log(coloumns);
             if (i==9)
             {
               status.push({
                 status : coloumns[1]?.innerText?.trim(),
+              })
+            }
+            if (i == 11){
+              status.push({
+                gender : coloumns[1]?.innerText?.trim(),
               })
             }
           }
