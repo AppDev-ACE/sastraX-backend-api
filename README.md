@@ -27,4 +27,4 @@ API Endpoints:
  - /timetable: To fetch timetable (POST)
  - /messMenu: To fetch mess menu (GET)
 
-API is temporarily hosted in CLOUDFLARED for testing purpose
+API is permanenly hosted in RENDER
