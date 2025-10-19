@@ -344,7 +344,7 @@ app.post('/leaveApplication',async(req,res) => {
   {
     await page.goto("https://webstream.sastra.edu/sastrapwi/academy/HostelStudentLeaveApplication.jsp");
     await page.waitForSelector("#txtLeaveType");
-    await page.select("#txtLeaveType",leaveType);
+    await page.type("#txtLeaveType",leaveType);
     await page.click("#txtFromDate", { clickCount: 3 });
     await page.type("#txtFromDate", fromDate);
     await page.click("#txtToDate", { clickCount: 3 });
@@ -353,12 +353,7 @@ app.post('/leaveApplication',async(req,res) => {
     await page.type("#txtNoofDays",noOfDays);
     await page.type("#txtReason",reason);
     await page.screenshot({ path: `leave_preview_${regNo}.png`, fullPage: true });
-    res.json({ 
-      success: true, 
-      message: "Form filled successfully (Screenshot Taken). Not submitted.",
-      screenshot: `leave_preview_${regNo}.png`
-    });
-    /*await Promise.all([
+    await Promise.all([
       page.click("#btSubmit"),
       page.waitForNavigation({ waitUntil: 'networkidle0' })
     ]);
@@ -376,7 +371,7 @@ app.post('/leaveApplication',async(req,res) => {
       }),
       lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
     },{merge: true});
-    res.json({success: true, message:"Leave applied successfully"});*/
+    res.json({success: true, message:"Leave applied successfully"});
   }
   catch (error)
   {
