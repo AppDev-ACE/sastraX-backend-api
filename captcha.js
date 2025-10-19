@@ -192,58 +192,6 @@ app.post('/logout',async(req,res) => {
 
 
 
-app.post('/relogin',async(req,res) => {
-    let { token, captcha } = req.body;
-    const session = await getSessionsByToken(token);
-    if (!session) 
-      return res.status(401).json({ success: false, message: "User not logged in" });
-
-    const { regNo, context } = session;
-    const page = await context.newPage();
-    await page.goto("https://webstream.sastra.edu/sastrapwi/", { waitUntil: "domcontentloaded" });
-
-    const doc = await db.collection("users").doc(regNo).get();        
-    const password = decrypt(doc.data().password);
-
-    try {
-      await page.type("#txtRegNumber", regNo);
-      await page.type("#txtPwd", password);
-      await page.type("#answer", captcha);
-
-      await Promise.all([
-        page.click('input[type="button"]'),
-        page.waitForNavigation({ waitUntil: 'networkidle0' })
-      ]);
-
-      const loginFailed = await page.$('.ui-state-error');
-      if (loginFailed) {
-        const msg = await page.evaluate(el => (el.textContent || "Login failed").trim(), loginFailed);
-        await context.close().catch(() => {});
-        return res.status(401).json({ success: false, message: msg });
-      }
-
-      const newtToken = uuidv4();
-      userSessions[newtToken] = { regNo, context };
-      return res.json({ success: true, message: "Academic Details Updated", newtToken });
-
-    } 
-    catch(err) 
-    {
-      await context.close().catch(() => {});
-      return res.status(500).json({ success: false, message: "Relogin failed", error: err?.message || String(err) });
-    } 
-    finally 
-    {
-      delete pendingCaptcha[regNo];
-      await page.close();
-    }
-});
-
-
-
-
-
-
 // This is a helper function to check whether the token is available in the firebase or not.
 // If it is available, the user is already logged in. If not, user has to login again.
 
@@ -267,6 +215,99 @@ async function getSessionsByToken(token){
   };
   return userSessions[token];
 }
+
+
+app.post('/relogin-captcha', async (req, res) => {
+  const { token } = req.body;
+
+  // Get session by token
+  const session = await getSessionsByToken(token);
+  if (!session) return res.status(400).json({ success: false, message: "Session expired" });
+
+  const { regNo, context } = session;
+  const page = await context.newPage();
+
+  await page.goto("https://webstream.sastra.edu/sastrapwi/", { waitUntil: "domcontentloaded" });
+
+  // Wait for captcha to render
+  await page.waitForFunction(() => {
+    const img = document.querySelector('#imgCaptcha');
+    return img && img.complete && img.naturalWidth > 0;
+  }, { timeout: 15000 });
+
+  const captchaElement = await page.$('#imgCaptcha');
+  const captchaPath = path.join(__dirname, 'captcha.png');
+  await captchaElement.screenshot({ path: captchaPath });
+
+  // Store the page & context for relogin
+  pendingCaptcha[regNo] = { page, context };
+
+  res.sendFile(captchaPath);
+});
+
+
+
+
+
+
+app.post('/relogin',async(req,res) => {
+    const { token, captcha } = req.body;
+    const session = await getSessionsByToken(token);
+
+    if (!session) 
+      return res.status(400).json({ success: false, message: "Captcha session expired or not found" });
+
+    const { regNo } = session;
+
+    const pending = pendingCaptcha[regNo];
+    if (!pending) 
+      return res.status(400).json({ success: false, message: "Captcha session expired or not found" });
+
+    const { page, context } = pending;
+
+    const doc = await db.collection("users").doc(regNo).get();        
+    const password = decrypt(doc.data().password);
+
+    try {
+      await page.type("#txtRegNumber", regNo);
+      await page.type("#txtPwd", password);
+      await page.type("#answer", captcha);
+
+      await Promise.all([
+        page.click('input[type="button"]'),
+        page.waitForNavigation({ waitUntil: 'networkidle0' })
+      ]);
+
+      const loginFailed = await page.$('.ui-state-error');
+      if (loginFailed) {
+        const msg = await page.evaluate(el => (el.textContent || "Login failed").trim(), loginFailed);
+        await context.close().catch(() => {});
+        return res.status(401).json({ success: false, message: msg });
+      }
+
+      const newtToken = uuidv4();
+      userSessions[newtToken] = { regNo, context };
+
+      delete userSessions[token];
+      await db.collection("activeSessions").doc(token).delete();
+
+      await db.collection("activeSessions").doc(newtToken).set({
+        regNo,
+        createdAt: new Date().toISOString()
+      });
+      return res.json({ success: true, message: "Academic Details Updated", newtToken });
+
+    } 
+    catch(err) 
+    {
+      await context.close().catch(() => {});
+      return res.status(500).json({ success: false, message: "Relogin failed", error: err?.message || String(err) });
+    } 
+    finally 
+    {
+      delete pendingCaptcha[regNo];
+    }
+});
 
 
 
@@ -376,6 +417,69 @@ app.post('/leaveApplication',async(req,res) => {
   catch (error)
   {
     res.status(500).json({ success: false, error: error.message });
+  }
+  finally{
+    await page.close();
+  }
+});
+
+
+
+
+
+
+app.post('/leaveHistory',async(req,res) => {
+  const { token, refresh } = req.body;
+  const session = await getSessionsByToken(token);
+  if (!session) 
+      return res.status(401).json({ success: false, message: "User not logged in" });
+  const { regNo, context } = session;
+  const page = await context.newPage();
+  try
+  {
+    //Storing leave history in Firestore
+    const docRef = db.collection("studentDetails").doc(regNo);
+    const doc = await docRef.get();
+
+    if (!doc.exists || refresh || !doc.data().leaveHistory)
+    {
+      await page.goto("https://webstream.sastra.edu/sastrapwi/academy/HostelStudentLeaveApplication.jsp");
+      const leaveHistory = await page.evaluate(() => { 
+        const table = document.querySelector("table div table")
+        if (!table) 
+          return "No records found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const leaveHistory = [];
+        for (let i=2;i<rows.length-2;i++)
+        {
+          const columns = rows[i].getElementsByTagName("td"); 
+          leaveHistory.push({
+              sno: columns[0]?.innerText?.trim(),
+              leaveType: columns[1]?.innerText?.trim(),
+              fromDate: columns[2]?.innerText?.trim(),
+              toDate: columns[3]?.innerText?.trim(),
+              noOfDays: columns[4]?.innerText?.trim(),
+              reason: columns[5]?.innerText?.trim(),
+              status: columns[6]?.innerText?.trim()
+          });
+        }
+        return leaveHistory;
+      });
+      await docRef.set({
+        leaveHistory : leaveHistory,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({ success: true, leaveHistory });
+    }
+    else
+    {
+      res.json({ success: true, leaveHistory: doc.data().leaveHistory});
+    }
+  }
+  catch(error)
+  {
+    res.status(500).json({ success: false, message: "Failed to fetch leave history", error: error.message });
   }
   finally{
     await page.close();
