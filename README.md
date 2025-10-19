@@ -6,6 +6,7 @@ API Endpoints:
  - /profile: To fetch name, register number, course and current semester and display under profile section (POST)
  - /profilePic: To fetch profile picture (POST)
  - /leaveApplication: To fetch leave application (POST)
+ - /leaveHistory: To fetch leave history (POST)
  - /grievances: To submit grievances (POST)
  - /attendance: To fetch the overall attendance and display in home page (POST)
  - /sastraDue: To fetch the total SASTRA fee due (POST)

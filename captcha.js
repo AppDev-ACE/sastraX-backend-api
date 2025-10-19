@@ -451,7 +451,7 @@ app.post('/leaveHistory',async(req,res) => {
         const tbody = table.querySelector("tbody");
         const rows = Array.from(tbody.getElementsByTagName("tr"));
         const leaveHistory = [];
-        for (let i=2;i<rows.length-2;i++)
+        for (let i=2;i<rows.length;i+=4)
         {
           const columns = rows[i].getElementsByTagName("td"); 
           leaveHistory.push({
