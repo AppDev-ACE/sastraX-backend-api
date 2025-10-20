@@ -1862,6 +1862,7 @@ const subjectAliasMap = {
   "co": "co",
 
   "data structures": "ds",
+  "data structure": "ds",
   "ds": "ds",
 
   "digital system design": "dsd",
@@ -1909,6 +1910,10 @@ const subjectAliasMap = {
   "computer graphics using opengl": "opengl",
   "graphics": "opengl",
   "opengl": "opengl",
+
+  "discrete structures" : "discrete",
+  "discrete structure" : "discrete",
+  "discrete" : "discrete",
 
   "artificial intelligence": "ai",
   "ai": "ai",
