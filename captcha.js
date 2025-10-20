@@ -617,12 +617,9 @@ app.post('/attendance',async (req,res) => {
             return "No records found";
         const tbody = table.querySelector("tbody");
         const rows = Array.from(tbody.getElementsByTagName("tr"));
-        const attendance = [];
         const columns = rows[rows.length-2].getElementsByTagName("td"); 
-        attendance.push({
-            attendance: columns[4]?.innerText?.trim()
-        });
-        return attendance;
+        
+        return columns[4]?.innerText?.trim()
       });
       await docRef.set({
         attendance : attendance,
