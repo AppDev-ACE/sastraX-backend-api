@@ -428,8 +428,15 @@ app.post('/leaveApplication',async(req,res) => {
 
 
 
+
+
+// This route fetches a student's leave history using their session token. 
+// If the leave history  is missing in Firestore or a refresh is requested, it scrapes the data 
+// from the SASTRA portal, stores/updates it in Firestore, 
+// and returns it. Otherwise, it serves the cached leave history from Firestore.
+
 app.post('/leaveHistory',async(req,res) => {
-  const { token, refresh } = req.body;
+  const { token } = req.body;
   const session = await getSessionsByToken(token);
   if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -439,43 +446,35 @@ app.post('/leaveHistory',async(req,res) => {
   {
     //Storing leave history in Firestore
     const docRef = db.collection("studentDetails").doc(regNo);
-    const doc = await docRef.get();
 
-    if (!doc.exists || refresh || !doc.data().leaveHistory)
-    {
-      await page.goto("https://webstream.sastra.edu/sastrapwi/academy/HostelStudentLeaveApplication.jsp");
-      const leaveHistory = await page.evaluate(() => { 
-        const table = document.querySelector("table div table")
-        if (!table) 
-          return "No records found";
-        const tbody = table.querySelector("tbody");
-        const rows = Array.from(tbody.getElementsByTagName("tr"));
-        const leaveHistory = [];
-        for (let i=2;i<rows.length;i+=4)
-        {
-          const columns = rows[i].getElementsByTagName("td"); 
-          leaveHistory.push({
-              sno: columns[0]?.innerText?.trim(),
-              leaveType: columns[1]?.innerText?.trim(),
-              fromDate: columns[2]?.innerText?.trim(),
-              toDate: columns[3]?.innerText?.trim(),
-              noOfDays: columns[4]?.innerText?.trim(),
-              reason: columns[5]?.innerText?.trim(),
-              status: columns[6]?.innerText?.trim()
-          });
-        }
-        return leaveHistory;
-      });
-      await docRef.set({
-        leaveHistory : leaveHistory,
-        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-      },{merge:true});
-      res.json({ success: true, leaveHistory });
-    }
-    else
-    {
-      res.json({ success: true, leaveHistory: doc.data().leaveHistory});
-    }
+    await page.goto("https://webstream.sastra.edu/sastrapwi/academy/HostelStudentLeaveApplication.jsp");
+    const leaveHistory = await page.evaluate(() => { 
+      const table = document.querySelectorAll("table");
+      if (!table) 
+        return "No records found";
+      const tbody = table[1].querySelector("tbody");
+      const rows = Array.from(tbody.getElementsByTagName("tr"));
+      const leaveHistory = [];
+      for (let i=2;i<rows.length-2;i++)
+      {
+        const columns = rows[i].getElementsByTagName("td"); 
+        leaveHistory.push({
+            sno: columns[0]?.innerText?.trim(),
+            leaveType: columns[1]?.innerText?.trim(),
+            fromDate: columns[2]?.innerText?.trim(),
+            toDate: columns[3]?.innerText?.trim(),
+            noOfDays: columns[4]?.innerText?.trim(),
+            reason: columns[5]?.innerText?.trim(),
+            status: columns[6]?.innerText?.trim()
+        });
+      }
+      return leaveHistory;
+    });
+    await docRef.set({
+      leaveHistory : leaveHistory,
+      lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+    },{merge:true});
+    res.json({ success: true, leaveHistory });
   }
   catch(error)
   {
@@ -496,7 +495,7 @@ app.post('/leaveHistory',async(req,res) => {
 // and returns it. Otherwise, it serves the cached profile from Firestore.
 
 app.post('/profile', async (req, res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -508,36 +507,27 @@ app.post('/profile', async (req, res) => {
       await page.waitForSelector('img[alt="Photo not found"]');
 
       //Storing data in Firestore
-      const docRef = db.collection("studentDetails").doc(regNo);        
-      const doc = await docRef.get();
-      if (!doc.exists || refresh || !doc.data().profile)
-      {
-        //If data not found in DB or if refreshed by user, scraping from SWI
-        const profileData = await page.evaluate(() => {
-          const name = document.querySelectorAll('.profile-text-bold')[0]?.innerText.trim();
-          const regNo = document.querySelectorAll('.profile-text')[0]?.innerText.trim();
-          const department = document.querySelectorAll('.profile-text')[1]?.innerText.trim();
-          const semester = document.querySelectorAll('.profile-text')[2]?.innerText.trim();
+      const docRef = db.collection("studentDetails").doc(regNo);
+      //If data not found in DB or if refreshed by user, scraping from SWI
+      const profileData = await page.evaluate(() => {
+        const name = document.querySelectorAll('.profile-text-bold')[0]?.innerText.trim();
+        const regNo = document.querySelectorAll('.profile-text')[0]?.innerText.trim();
+        const department = document.querySelectorAll('.profile-text')[1]?.innerText.trim();
+        const semester = document.querySelectorAll('.profile-text')[2]?.innerText.trim();
 
-          return{
-            name,
-            regNo,
-            department,
-            semester,
-          };
-        });
-        
-        await docRef.set({
-          profile : profileData,
-          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-        },{merge: true});
-        res.json({success: true, profileData});
-      }  
-      else
-      {
-        //Else, fetch from firestore
-        res.json({success: true,profile: doc.data().profile});
-      }
+        return{
+          name,
+          regNo,
+          department,
+          semester,
+        };
+      });
+      
+      await docRef.set({
+        profile : profileData,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge: true});
+      res.json({success: true, profileData});
     }
     catch (error)
     {
@@ -559,7 +549,7 @@ app.post('/profile', async (req, res) => {
 // stores the URL in Firestore, and returns it. Otherwise, it serves the cached image URL.
 
 app.post('/profilePic', async(req, res) => {
-  let { token,refresh } = req.body;
+  let { token } = req.body;
   const session = await getSessionsByToken(token);
   if (!session) 
     return res.status(401).json({ success: false, message: "User not logged in" });
@@ -569,32 +559,24 @@ app.post('/profilePic', async(req, res) => {
   {
       //Storing data in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
-      if (!doc.exists || refresh || !doc.data().profilePic)
-      {
-        //If data not found in DB or if refreshed by user, scraping from SWI
-        await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
-        await page.waitForSelector('img[alt="Photo not found"]');
-        await new Promise(resolve => setTimeout(resolve, 1500));
+      //If data not found in DB or if refreshed by user, scraping from SWI
+      await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
+      await page.waitForSelector('img[alt="Photo not found"]');
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-        const profilePath = path.join(__dirname, 'profile.png');
-        const profileElement = await page.$('img[alt="Photo not found"]');
-        await profileElement.screenshot({ path: profilePath });
+      const profilePath = path.join(__dirname, 'profile.png');
+      const profileElement = await page.$('img[alt="Photo not found"]');
+      await profileElement.screenshot({ path: profilePath });
 
-        const result = await cloudinary.uploader.upload(profilePath, {
-          overwrite: true
-        });
-        const imageUrl = result.secure_url;
-        await docRef.set({
-          profilePic : imageUrl,
-          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-        },{merge:true});
-        res.json({success: true,imageUrl});
-      }
-      else
-      {
-        res.json({success: true,profilePic: doc.data().profilePic});
-      }  
+      const result = await cloudinary.uploader.upload(profilePath, {
+        overwrite: true
+      });
+      const imageUrl = result.secure_url;
+      await docRef.set({
+        profilePic : imageUrl,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({success: true,imageUrl}); 
   }
   catch(error)
   {
@@ -617,7 +599,7 @@ app.post('/profilePic', async(req, res) => {
 // Otherwise, it serves the cached attendance from Firestore.
 
 app.post('/attendance',async (req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -627,32 +609,34 @@ app.post('/attendance',async (req,res) => {
     {
       //Storing attendance in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
 
-      if (!doc.exists || refresh || !doc.data().attendance)
-      {
-        await page.goto("https://webstream.sastra.edu/sastrapwi/usermanager/home.jsp");
-        await page.waitForSelector('#divAttendance', { timeout: 5000 });
-        const attendanceHTML = await page.$eval("#divAttendance span", el => el.innerText);
-        
-        await docRef.set({
-          attendance : attendanceHTML,
-          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-        },{merge:true});
-        res.json({success: true,attendanceHTML});
-      }
-      else
-      {
-        res.json({success: true,attendance: doc.data().attendance});
-      }   
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=7");
+      const attendance = await page.evaluate(() => { 
+        const table = document.querySelector("table");
+        if (!table)
+            return "No records found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const attendance = [];
+        const columns = rows[rows.length-2].getElementsByTagName("td"); 
+        attendance.push({
+            percentage: columns[4]?.innerText?.trim()
+        });
+        return attendance;
+      });
+      await docRef.set({
+        attendance : attendance,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({ success: true, attendance });
     }
     catch(error)
     {
-      res.status(500).json({ success: false, message: "Failed to fetch attendance",error: error.message });
+      res.status(500).json({ success: false, message: "Failed to fetch attendance", error: error.message });
     }
     finally{
       await page.close();
-    } 
+    }
 });
 
 
@@ -666,7 +650,7 @@ app.post('/attendance',async (req,res) => {
 // Otherwise, it serves the cached due amount from Firestore.
 
 app.post('/sastraDue',async (req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -676,35 +660,28 @@ app.post('/sastraDue',async (req,res) => {
     {
       //Storing sastra due in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
 
-      if (!doc.exists || refresh || !doc.data().sastraDue)
-      {
-          await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=1");
-          const totalSastraDue = await page.evaluate(() => {
-            const table = document.querySelector("table");
-            if (!table)
-                return "No records found";
-            const tbody = table.querySelector("tbody"); 
-            const rows = Array.from(tbody.getElementsByTagName("tr")); 
-            for (const row of rows)
-            {
-              const columns = row.getElementsByTagName("td"); 
-              if (columns[0].innerText === "Total :")
-                return columns[1].innerText;
-            }
-          });
+      await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=1");
+      const totalSastraDue = await page.evaluate(() => {
+        const table = document.querySelector("table");
+        if (!table)
+            return "No records found";
+        const tbody = table.querySelector("tbody"); 
+        const rows = Array.from(tbody.getElementsByTagName("tr")); 
+        for (const row of rows)
+        {
+          const columns = row.getElementsByTagName("td"); 
+          if (columns[0].innerText === "Total :")
+            return columns[1].innerText;
+        }
+      });
 
-          await docRef.set({
-            sastraDue : totalSastraDue,
-            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-          },{merge:true});
-          res.json({success: true,totalSastraDue});
-      }
-      else
-      {
-        res.json({success: true,sastraDue: doc.data().sastraDue});
-      }
+      await docRef.set({
+        sastraDue : totalSastraDue,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({success: true,totalSastraDue});
+      
     }
     catch(error)
     {
@@ -726,7 +703,7 @@ app.post('/sastraDue',async (req,res) => {
 // Otherwise, it serves the cached due amount from Firestore.
 
 app.post('/hostelDue', async (req, res) => {
-  let { token, refresh } = req.body;
+  let { token } = req.body;
   const session = await getSessionsByToken(token);
 
   if (!session)
@@ -737,57 +714,46 @@ app.post('/hostelDue', async (req, res) => {
 
   try {
     const docRef = db.collection("studentDetails").doc(regNo);
-    const doc = await docRef.get();
+    await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=2");
 
-    // Fetch from website if first time or refresh required
-    if (!doc.exists || refresh || !doc.data().hostelDue) {
-      await page.goto("https://webstream.sastra.edu/sastrapwi/accounts/Feedue.jsp?arg=2");
+    const data = await page.evaluate(() => {
+      const table = document.querySelector("table");
+      if (!table) return { hostelDue: [], totalDue: "No total found" };
 
-      const data = await page.evaluate(() => {
-        const table = document.querySelector("table");
-        if (!table) return { hostelDue: [], totalDue: "No total found" };
+      const tbody = table.querySelector("tbody");
+      const rows = Array.from(tbody.getElementsByTagName("tr"));
 
-        const tbody = table.querySelector("tbody");
-        const rows = Array.from(tbody.getElementsByTagName("tr"));
+      let hostelDue = [];
+      let totalDue = "No total found";
 
-        let hostelDue = [];
-        let totalDue = "No total found";
+      for (let i = 2; i < rows.length; i++) {
+        const columns = rows[i].getElementsByTagName("td");
+        const firstCol = columns[0]?.innerText?.trim();
 
-        for (let i = 2; i < rows.length; i++) {
-          const columns = rows[i].getElementsByTagName("td");
-          const firstCol = columns[0]?.innerText?.trim();
-
-          if (firstCol === "Total :" || firstCol === "Total:") {
-            totalDue = columns[1]?.innerText?.trim() || "No total found";
-          } else {
-            hostelDue.push({
-              sem: columns[1]?.innerText?.trim() || "",
-              feeDetails: columns[2]?.innerText?.trim() || "",
-              dueDate: columns[3]?.innerText?.trim() || "",
-              dueAmount: columns[4]?.innerText?.trim() || "",
-            });
-          }
+        if (firstCol === "Total :" || firstCol === "Total:") {
+          totalDue = columns[1]?.innerText?.trim() || "No total found";
+        } else {
+          hostelDue.push({
+            sem: columns[1]?.innerText?.trim() || "",
+            feeDetails: columns[2]?.innerText?.trim() || "",
+            dueDate: columns[3]?.innerText?.trim() || "",
+            dueAmount: columns[4]?.innerText?.trim() || "",
+          });
         }
+      }
 
-        return { hostelDue, totalDue };
-      });
+      return { hostelDue, totalDue };
+    });
 
-      // Save to Firestore
-      await docRef.set({
-        hostelDue: data.hostelDue,
-        totalDue: data.totalDue,
-        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-      }, { merge: true });
+    // Save to Firestore
+    await docRef.set({
+      hostelDue: data.hostelDue,
+      totalDue: data.totalDue,
+      lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+    }, { merge: true });
 
-      res.json({ success: true, ...data });
-    } else {
-      // Load from Firestore
-      res.json({
-        success: true,
-        hostelDue: doc.data().hostelDue,
-        totalDue: doc.data().totalDue
-      });
-    }
+    res.json({ success: true, ...data });
+    
 
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to fetch due amount", error: error.message });
@@ -808,7 +774,7 @@ app.post('/hostelDue', async (req, res) => {
 // Otherwise, it serves the cached fee collections from Firestore.
 
 app.post('/feeCollections',async (req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -818,41 +784,33 @@ app.post('/feeCollections',async (req,res) => {
     {
       //Storing fee collections in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
 
-      if (!doc.exists || refresh || !doc.data().feeCollections)
-      {
-        await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=12");
-        const feeCollections = await page.evaluate(() => { 
-          const table = document.querySelector("table");
-          if (!table)
-              return "No records found";
-          const tbody = table.querySelector("tbody");
-          const rows = Array.from(tbody.getElementsByTagName("tr"));
-          const feeCollections = [];
-          for (let i=2;i<rows.length-2;i++)
-          {
-            const columns = rows[i].getElementsByTagName("td"); 
-            feeCollections.push({
-                semester: columns[0]?.innerText?.trim(),
-                institution: columns[1]?.innerText?.trim(),
-                particulars: columns[2]?.innerText?.trim(),
-                amountCollected: columns[3]?.innerText?.trim(),
-                collectedDate: columns[4]?.innerText?.trim()
-            });
-          }
-          return feeCollections;
-        });
-        await docRef.set({
-          feeCollections : feeCollections,
-          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-        },{merge:true});
-        res.json({ success: true, feeCollections });
-      }
-      else
-      {
-        res.json({ success: true, feeCollections: doc.data().feeCollections});
-      }
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=12");
+      const feeCollections = await page.evaluate(() => { 
+        const table = document.querySelector("table");
+        if (!table)
+            return "No records found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const feeCollections = [];
+        for (let i=2;i<rows.length-2;i++)
+        {
+          const columns = rows[i].getElementsByTagName("td"); 
+          feeCollections.push({
+              semester: columns[0]?.innerText?.trim(),
+              institution: columns[1]?.innerText?.trim(),
+              particulars: columns[2]?.innerText?.trim(),
+              amountCollected: columns[3]?.innerText?.trim(),
+              collectedDate: columns[4]?.innerText?.trim()
+          });
+        }
+        return feeCollections;
+      });
+      await docRef.set({
+        feeCollections : feeCollections,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({ success: true, feeCollections });
     }
     catch(error)
     {
@@ -874,7 +832,7 @@ app.post('/feeCollections',async (req,res) => {
 // and returns it. Otherwise, it serves the cached data from Firestore.
 
 app.post('/examSchedule',async (req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -884,40 +842,33 @@ app.post('/examSchedule',async (req,res) => {
     {
       //Storing exam schedule in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
-
-      if (!doc.exists || refresh || !doc.data().examSchedule)
-      {
-        await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=23");
-        const examSchedule = await page.evaluate(() => { 
-          const table = document.querySelector("table");
-          if (!table)
-              return "No records found";
-          const tbody = table.querySelector("tbody");
-          const rows = Array.from(tbody.getElementsByTagName("tr"));
-          const examSchedule = [];
-          for (let i=2;i<rows.length-2;i++)
-          {
-            const columns = rows[i].getElementsByTagName("td"); 
-            examSchedule.push({
-                examDate: columns[0]?.innerText?.trim(),
-                examTime: columns[1]?.innerText?.trim(),
-                subCode: columns[2]?.innerText?.trim(),
-                subName: columns[3]?.innerText?.trim()
-            });
-          }
-          return examSchedule;
-        });
-        await docRef.set({
-          examSchedule : examSchedule,
-          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-        },{merge:true});
-        res.json({ success: true, examSchedule });
-      }
-      else
-      {
-        res.json({ success: true, examSchedule: doc.data().examSchedule});
-      }
+      
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=23");
+      const examSchedule = await page.evaluate(() => { 
+        const table = document.querySelector("table");
+        if (!table)
+            return "No records found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const examSchedule = [];
+        for (let i=2;i<rows.length-2;i++)
+        {
+          const columns = rows[i].getElementsByTagName("td"); 
+          examSchedule.push({
+              examDate: columns[0]?.innerText?.trim(),
+              examTime: columns[1]?.innerText?.trim(),
+              subCode: columns[2]?.innerText?.trim(),
+              subName: columns[3]?.innerText?.trim()
+          });
+        }
+        return examSchedule;
+      });
+      await docRef.set({
+        examSchedule : examSchedule,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({ success: true, examSchedule });
+      
     }
     catch(error)
     {
@@ -940,7 +891,7 @@ app.post('/examSchedule',async (req,res) => {
 // and returns it. Otherwise, it serves the cached data from Firestore.
 
 app.post('/subjectWiseAttendance',async (req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -950,42 +901,35 @@ app.post('/subjectWiseAttendance',async (req,res) => {
     {
       //Storing subject-wise attendance in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
-
-      if (!doc.exists || refresh || !doc.data().subjectWiseAttendance)
-      {
-        await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=7");
-        const subjectWiseAttendance = await page.evaluate(() => { 
-          const table = document.querySelector("table");
-          if (!table)
-              return "No records found";
-          const tbody = table.querySelector("tbody");
-          const rows = Array.from(tbody.getElementsByTagName("tr"));
-          const attendance = [];
-          for (let i=2;i<rows.length-2;i++)
-          {
-            const columns = rows[i].getElementsByTagName("td"); 
-            attendance.push({
-                code: columns[0]?.innerText?.trim(),
-                subject: columns[1]?.innerText?.trim(),
-                totalHrs: columns[2]?.innerText?.trim(),
-                presentHrs: columns[3]?.innerText?.trim(),
-                absentHrs: columns[4]?.innerText?.trim(),
-                percentage: columns[5]?.innerText?.trim()
-            });
-          }
-          return attendance;
-        });
-        await docRef.set({
-          subjectAttendance : subjectWiseAttendance,
-          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-        },{merge:true});
-        res.json({ success: true, subjectWiseAttendance });
-      }
-      else
-      {
-        res.json({ success: true, subjectAttendance: doc.data().subjectAttendance});
-      }
+      
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=7");
+      const subjectWiseAttendance = await page.evaluate(() => { 
+        const table = document.querySelector("table");
+        if (!table)
+            return "No records found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const attendance = [];
+        for (let i=2;i<rows.length-2;i++)
+        {
+          const columns = rows[i].getElementsByTagName("td"); 
+          attendance.push({
+              code: columns[0]?.innerText?.trim(),
+              subject: columns[1]?.innerText?.trim(),
+              totalHrs: columns[2]?.innerText?.trim(),
+              presentHrs: columns[3]?.innerText?.trim(),
+              absentHrs: columns[4]?.innerText?.trim(),
+              percentage: columns[5]?.innerText?.trim()
+          });
+        }
+        return attendance;
+      });
+      await docRef.set({
+        subjectAttendance : subjectWiseAttendance,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({ success: true, subjectWiseAttendance });
+      
     }
     catch(error)
     {
@@ -998,7 +942,7 @@ app.post('/subjectWiseAttendance',async (req,res) => {
 
 
 app.post('/hourWiseAttendance',async (req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -1008,55 +952,46 @@ app.post('/hourWiseAttendance',async (req,res) => {
     {
       //Storing hour-wise attendance in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
-      
       const docRef1 = db.collection("OD").doc(regNo);
-      const doc1 = await docRef1.get();
+      
+      await page.goto("https://webstream.sastra.edu/sastrapwi/academy/studentHourWiseAttendance.jsp");
+      const hourWiseAttendance = await page.evaluate(() => {
+          const table = document.querySelector('table[name="table1"]');
+          if (!table)
+            return "No record found";
+          const tbody = table.querySelector("tbody");
+          const rows = Array.from(tbody.querySelectorAll("tr"));
+          const attendance = []
+          for (let i=1;i<rows.length;i++)
+          {
+            const coloumns = rows[i].querySelectorAll("td");
+            attendance.push({
+              dateDay : coloumns[0]?.innerText?.trim(),
+              hour1 : coloumns[1]?.innerText?.trim(),
+              hour2 : coloumns[2]?.innerText?.trim(),
+              hour3 : coloumns[3]?.innerText?.trim(),
+              hour4 : coloumns[4]?.innerText?.trim(),
+              hour5 : coloumns[5]?.innerText?.trim(),
+              hour6 : coloumns[6]?.innerText?.trim(),
+              hour7 : coloumns[7]?.innerText?.trim(),
+              hour8 : coloumns[8]?.innerText?.trim(),
+            });
+          }
+          return attendance;
+      });
+      //Adding to OD
+      await docRef1.set({
+        hourWiseAttendance : hourWiseAttendance,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
 
-      if (!doc.exists || !doc1.exists || refresh || !doc.data().hourWiseAttendance || !doc1.data().hourWiseAttendance)
-      {
-        await page.goto("https://webstream.sastra.edu/sastrapwi/academy/studentHourWiseAttendance.jsp");
-        const hourWiseAttendance = await page.evaluate(() => {
-            const table = document.querySelector('table[name="table1"]');
-            if (!table)
-              return "No record found";
-            const tbody = table.querySelector("tbody");
-            const rows = Array.from(tbody.querySelectorAll("tr"));
-            const attendance = []
-            for (let i=1;i<rows.length;i++)
-            {
-              const coloumns = rows[i].querySelectorAll("td");
-              attendance.push({
-                dateDay : coloumns[0]?.innerText?.trim(),
-                hour1 : coloumns[1]?.innerText?.trim(),
-                hour2 : coloumns[2]?.innerText?.trim(),
-                hour3 : coloumns[3]?.innerText?.trim(),
-                hour4 : coloumns[4]?.innerText?.trim(),
-                hour5 : coloumns[5]?.innerText?.trim(),
-                hour6 : coloumns[6]?.innerText?.trim(),
-                hour7 : coloumns[7]?.innerText?.trim(),
-                hour8 : coloumns[8]?.innerText?.trim(),
-              });
-            }
-            return attendance;
-        });
-        //Adding to OD
-        await docRef1.set({
-          hourWiseAttendance : hourWiseAttendance,
-          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-        },{merge:true});
-
-        //Adding to usual student details
-        await docRef.set({
-          hourWiseAttendance : hourWiseAttendance,
-          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-        },{merge:true});
-        res.json({ success: true, hourWiseAttendance });
-      }
-      else
-      {
-        res.json({ success: true, hourWiseAttendance: doc.data().hourWiseAttendance});
-      }
+      //Adding to usual student details
+      await docRef.set({
+        hourWiseAttendance : hourWiseAttendance,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({ success: true, hourWiseAttendance });
+      
     }
     catch(error)
     {
@@ -1078,7 +1013,7 @@ app.post('/hourWiseAttendance',async (req,res) => {
 // stores/updates it in Firestore, and returns it. Otherwise, it serves the cached data from Firestore.
 
 app.post('/semGrades', async (req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -1088,43 +1023,36 @@ app.post('/semGrades', async (req,res) => {
     {
       //Storing sem-wise grades in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
-
-      if (!doc.exists || refresh || !doc.data().semGrades)
-      {
-          await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
-          const gradeData = await page.evaluate(() => {
-            const table = document.querySelector("table");
-            if (!table)
-              return "No records found";
-            const tbody = table.querySelector("tbody");
-            const rows = Array.from(tbody.getElementsByTagName("tr"));
-            const gradeCredit = [];
-            for (let i=2;i<rows.length-1;i++)
-            {
-              const columns = rows[i].getElementsByTagName("td");
-              gradeCredit.push({
-                sem : columns[0]?.innerText?.trim(),
-                monthYear : columns[1]?.innerText?.trim(),
-                code : columns[2]?.innerText?.trim(),
-                subject : columns[3]?.innerText?.trim(),
-                credit : columns[5]?.innerText?.trim(),
-                grade : columns[6]?.innerText?.trim()
-              });
-            }
-            return gradeCredit;
+      
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
+      const gradeData = await page.evaluate(() => {
+        const table = document.querySelector("table");
+        if (!table)
+          return "No records found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const gradeCredit = [];
+        for (let i=2;i<rows.length-1;i++)
+        {
+          const columns = rows[i].getElementsByTagName("td");
+          gradeCredit.push({
+            sem : columns[0]?.innerText?.trim(),
+            monthYear : columns[1]?.innerText?.trim(),
+            code : columns[2]?.innerText?.trim(),
+            subject : columns[3]?.innerText?.trim(),
+            credit : columns[5]?.innerText?.trim(),
+            grade : columns[6]?.innerText?.trim()
           });
-          
-          await docRef.set({
-            semGrades : gradeData,
-            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-          },{merge:true});
-          res.json({success: true,gradeData});
-      }
-      else
-      {
-        res.json({success: true,semGrades: doc.data().semGrades});
-      }
+        }
+        return gradeCredit;
+      });
+      
+      await docRef.set({
+        semGrades : gradeData,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({success: true,gradeData});
+      
     }
     catch(error)
     {
@@ -1147,7 +1075,7 @@ app.post('/semGrades', async (req,res) => {
 // stores/updates it in Firestore, and returns it. Otherwise, it serves the cached data from Firestore.
 
 app.post('/internalMarks', async (req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -1157,40 +1085,33 @@ app.post('/internalMarks', async (req,res) => {
     {
       //Storing internal marks in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
-
-      if (!doc.exists || refresh || !doc.data().internalMarks)
-      {
-          await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=22");
-          const marksData = await page.evaluate(() => {
-            const table = document.querySelectorAll("table");
-            if (!table)
-              return "No records found";
-            const tbody = table[0].querySelector("tbody");
-            const rows = Array.from(tbody.getElementsByTagName("tr"));
-            const marks = [];
-            for (let i=2;i<rows.length;i++)
-            {
-              const columns = rows[i].getElementsByTagName("td");
-              marks.push({
-                subjectCode : columns[0]?.innerText?.trim(),
-                subjectName : columns[1]?.innerText?.trim(),
-                totalCIAMarks : columns[2]?.innerText?.trim(),
-              });
-            }
-            return marks;
+      
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=22");
+      const marksData = await page.evaluate(() => {
+        const table = document.querySelectorAll("table");
+        if (!table)
+          return "No records found";
+        const tbody = table[0].querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const marks = [];
+        for (let i=2;i<rows.length;i++)
+        {
+          const columns = rows[i].getElementsByTagName("td");
+          marks.push({
+            subjectCode : columns[0]?.innerText?.trim(),
+            subjectName : columns[1]?.innerText?.trim(),
+            totalCIAMarks : columns[2]?.innerText?.trim(),
           });
-          
-          await docRef.set({
-            internalMarks : marksData,
-            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-          },{merge:true});
-          res.json({success: true,marksData});
-      }
-      else
-      {
-        res.json({success: true,internalMarks: doc.data().internalMarks});
-      }
+        }
+        return marks;
+      });
+      
+      await docRef.set({
+        internalMarks : marksData,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({success: true,marksData});
+      
     }
     catch(error)
     {
@@ -1210,7 +1131,7 @@ app.post('/internalMarks', async (req,res) => {
 
 
 app.post('/ciaWiseInternalMarks', async (req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -1220,42 +1141,35 @@ app.post('/ciaWiseInternalMarks', async (req,res) => {
     {
       //Storing internal marks in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
-
-      if (!doc.exists || refresh || !doc.data().ciaWiseInternalMarks)
-      {
-          await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=22");
-          const marksData = await page.evaluate(() => {
-            const table = document.querySelectorAll("table");
-            if (!table)
-              return "No records found";
-            const tbody = table[1].querySelector("tbody");
-            const rows = Array.from(tbody.getElementsByTagName("tr"));
-            const marks = [];
-            for (let i=2;i<rows.length;i++)
-            {
-              const columns = rows[i].getElementsByTagName("td");
-              marks.push({
-                subjectCode : columns[0]?.innerText?.trim(),
-                subjectName : columns[1]?.innerText?.trim(),
-                component : columns[2]?.innerText?.trim(),
-                marksObtained : columns[3]?.innerText?.trim(),
-                maxMarks : columns[4]?.innerText?.trim(),
-              });
-            }
-            return marks;
+      
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=22");
+      const marksData = await page.evaluate(() => {
+        const table = document.querySelectorAll("table");
+        if (!table)
+          return "No records found";
+        const tbody = table[1].querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const marks = [];
+        for (let i=2;i<rows.length;i++)
+        {
+          const columns = rows[i].getElementsByTagName("td");
+          marks.push({
+            subjectCode : columns[0]?.innerText?.trim(),
+            subjectName : columns[1]?.innerText?.trim(),
+            component : columns[2]?.innerText?.trim(),
+            marksObtained : columns[3]?.innerText?.trim(),
+            maxMarks : columns[4]?.innerText?.trim(),
           });
-          
-          await docRef.set({
-            ciaWiseInternalMarks : marksData,
-            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-          },{merge:true});
-          res.json({success: true,marksData});
-      }
-      else
-      {
-        res.json({success: true,ciaWiseInternalMarks: doc.data().ciaWiseInternalMarks});
-      }
+        }
+        return marks;
+      });
+      
+      await docRef.set({
+        ciaWiseInternalMarks : marksData,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({success: true,marksData});
+      
     }
     catch(error)
     {
@@ -1278,7 +1192,7 @@ app.post('/ciaWiseInternalMarks', async (req,res) => {
 // Otherwise, it serves the cached status from Firestore.
 
 app.post('/studentStatus', async(req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -1288,47 +1202,40 @@ app.post('/studentStatus', async(req,res) => {
     {
       //Storing student status in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
-
-      if (!doc.exists || refresh || !doc.data().studentStatus)
-      { 
-        await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=59");
-        const statusData = await page.evaluate(() => {
-          const table = document.querySelector("table");
-          if (!table)
-            return "No records Found";
-          const tbody = table.querySelector("tbody");
-          const rows = Array.from(tbody.getElementsByTagName("tr"));
-          const status =[];
-          for (let i=0;i<rows.length;i++)
+      
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=59");
+      const statusData = await page.evaluate(() => {
+        const table = document.querySelector("table");
+        if (!table)
+          return "No records Found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const status =[];
+        for (let i=0;i<rows.length;i++)
+        {
+          const coloumns = rows[i].getElementsByTagName("td");
+          console.log(coloumns);
+          if (i==9)
           {
-            const coloumns = rows[i].getElementsByTagName("td");
-            console.log(coloumns);
-            if (i==9)
-            {
-              status.push({
-                status : coloumns[1]?.innerText?.trim(),
-              })
-            }
-            if (i == 11){
-              status.push({
-                gender : coloumns[1]?.innerText?.trim(),
-              })
-            }
+            status.push({
+              status : coloumns[1]?.innerText?.trim(),
+            })
           }
-          return status;
-        });
-        
-        await docRef.set({
-          studentStatus : statusData,
-          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-        },{merge:true});
-        res.json({success: true,statusData});
-      }
-      else
-      {
-        res.json({success: true,studentStatus: doc.data().studentStatus});
-      }
+          if (i == 11){
+            status.push({
+              gender : coloumns[1]?.innerText?.trim(),
+            })
+          }
+        }
+        return status;
+      });
+      
+      await docRef.set({
+        studentStatus : statusData,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({success: true,statusData});
+      
     }
     catch(error)
     {
@@ -1350,7 +1257,7 @@ app.post('/studentStatus', async(req,res) => {
 // Otherwise, it serves the cached SGPA from Firestore.
 
 app.post('/sgpa', async(req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -1360,38 +1267,31 @@ app.post('/sgpa', async(req,res) => {
     {
       //Storing SGPA in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
-
-      if (!doc.exists || refresh || !doc.data().sgpa)
-      { 
-        await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
-        const sgpaData = await page.evaluate(() => {
-          const table = document.querySelector('table[align="left"]');
-          if (!table)
-            return "No records found";
-          const tbody = table.querySelector("tbody");
-          const rows = Array.from(tbody.getElementsByTagName("tr"));
-          const sgpa = [];
-          for (let i=2;i<rows.length;i++)
-          {
-            const columns = rows[i].getElementsByTagName("td");
-            sgpa.push({
-              sem : columns[0]?.innerText?.trim(),
-              sgpa : columns[1]?.innerText?.trim()
-            });
-          }
-          return sgpa;
-        });
-        await docRef.set({
-          sgpa : sgpaData,
-          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-        },{merge:true});
-        res.json({success: true,sgpaData});
-      }
-      else
-      {
-        res.json({success: true,sgpa: doc.data().sgpa});
-      }
+      
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
+      const sgpaData = await page.evaluate(() => {
+        const table = document.querySelector('table[align="left"]');
+        if (!table)
+          return "No records found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const sgpa = [];
+        for (let i=2;i<rows.length;i++)
+        {
+          const columns = rows[i].getElementsByTagName("td");
+          sgpa.push({
+            sem : columns[0]?.innerText?.trim(),
+            sgpa : columns[1]?.innerText?.trim()
+          });
+        }
+        return sgpa;
+      });
+      await docRef.set({
+        sgpa : sgpaData,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({success: true,sgpaData});
+      
     }
     catch (error)
     {
@@ -1415,7 +1315,7 @@ app.post('/sgpa', async(req,res) => {
 // 5. Handles errors and ensures Puppeteer page is closed.
 
 app.post('/cgpa', async(req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -1425,38 +1325,31 @@ app.post('/cgpa', async(req,res) => {
     {
       //Storing CGPA in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
-      if (!doc.exists || refresh || !doc.data().cgpa)
-      { 
-          await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
-          const cgpaData = await page.evaluate(() => {
-            const table = document.querySelector('table', { timeout: 10000 });
-            if (!table)
-              return "No records found";
-            const tbody = table.querySelector("tbody");
-            const rows = Array.from(tbody.getElementsByTagName("tr"));
-            const cgpa = [];
-            for (let i=0;i<rows.length;i++)
-            {
-              const columns = rows[i].getElementsByTagName("td");
-              if (columns[0]?.innerText?.trim() === "CGPA")
-                cgpa.push({
-                  cgpa : columns[1]?.innerText?.trim()
-                });
-            }
-            return cgpa;
-          });
-          
-          await docRef.set({
-            cgpa : cgpaData,
-            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-          },{merge:true});
-          res.json({success: true,cgpa: cgpaData});
-      }
-      else
-      {
-        res.json({success: true,cgpa: doc.data().cgpa});
-      }
+       
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=28");
+      const cgpaData = await page.evaluate(() => {
+        const table = document.querySelector('table', { timeout: 10000 });
+        if (!table)
+          return "No records found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const cgpa = [];
+        for (let i=0;i<rows.length;i++)
+        {
+          const columns = rows[i].getElementsByTagName("td");
+          if (columns[0]?.innerText?.trim() === "CGPA")
+            cgpa.push({
+              cgpa : columns[1]?.innerText?.trim()
+            });
+        }
+        return cgpa;
+      });
+      
+      await docRef.set({
+        cgpa : cgpaData,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({success: true,cgpa: cgpaData});
       
     }
     catch (error)
@@ -1482,7 +1375,7 @@ app.post('/cgpa', async(req,res) => {
 // - Handles errors gracefully and ensures Puppeteer page is closed.
 
 app.post('/dob', async(req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -1492,36 +1385,29 @@ app.post('/dob', async(req,res) => {
     {
       //Storing DOB grades in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
+      
+      await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=59");
+      const dobData = await page.evaluate(() => {
+        const table = document.querySelector("table");
+        if (!table)
+          return "No records Found";
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const dob =[];
+        const coloumns = rows[2].getElementsByTagName("td");
+        dob.push({
+          dob : coloumns[1]?.innerText?.trim(),
+        })
+          
+        return dob;
+      });
 
-      if (!doc.exists || refresh || !doc.data().dob)
-      { 
-          await page.goto("https://webstream.sastra.edu/sastrapwi/resource/StudentDetailsResources.jsp?resourceid=59");
-          const dobData = await page.evaluate(() => {
-            const table = document.querySelector("table");
-            if (!table)
-              return "No records Found";
-            const tbody = table.querySelector("tbody");
-            const rows = Array.from(tbody.getElementsByTagName("tr"));
-            const dob =[];
-            const coloumns = rows[2].getElementsByTagName("td");
-            dob.push({
-              dob : coloumns[1]?.innerText?.trim(),
-            })
-              
-            return dob;
-          });
-
-          await docRef.set({
-            dob : dobData,
-            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-          },{merge:true});
-          res.json({success: true,dobData});
-      }
-      else
-      {
-        res.json({success: true,dob: doc.data().dob});
-      }
+      await docRef.set({
+        dob : dobData,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({success: true,dobData});
+      
     }
     catch(error)
     {
@@ -1547,7 +1433,7 @@ app.post('/dob', async(req,res) => {
 // - Handles errors and ensures Puppeteer page is closed.
 
 app.post('/facultyList', async  (req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -1557,46 +1443,39 @@ app.post('/facultyList', async  (req,res) => {
     {
       //Storing faculty list in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
+      
+      await page.goto("https://webstream.sastra.edu/sastrapwi/academy/frmStudentTimetable.jsp");
+      const timeTable = await page.evaluate(() => {
+        const tables = document.querySelectorAll("table");
+        const timetableTable = tables[2]; 
+        if (!timetableTable) return null;
+        const rows = timetableTable.querySelectorAll("tbody tr");
+        const data = [];
+        for (let i = 1; i < rows.length; i++) 
+        { 
+          const cells = rows[i].querySelectorAll("td");
+          if (cells.length < 5) continue;
 
-      if (!doc.exists || refresh || !doc.data().facultyList)
-      { 
-          await page.goto("https://webstream.sastra.edu/sastrapwi/academy/frmStudentTimetable.jsp");
-          const timeTable = await page.evaluate(() => {
-            const tables = document.querySelectorAll("table");
-            const timetableTable = tables[2]; 
-            if (!timetableTable) return null;
-            const rows = timetableTable.querySelectorAll("tbody tr");
-            const data = [];
-            for (let i = 1; i < rows.length; i++) 
-            { 
-              const cells = rows[i].querySelectorAll("td");
-              if (cells.length < 5) continue;
+          const code = cells[0].innerText.trim();
+          if (!code || code.toLowerCase() === 'na') continue;
 
-              const code = cells[0].innerText.trim();
-              if (!code || code.toLowerCase() === 'na') continue;
-
-              data.push({
-                code,
-                description: cells[1].innerText.trim(),
-                section: cells[2].innerText.trim(),
-                faculty: cells[3].innerText.trim(),
-                venue: cells[4].innerText.trim(),
-              });
-            }
-          return data.length ? data : null;
-        });
-        
-        await docRef.set({
-            facultyList : timeTable,
-            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-          },{merge:true});
-          res.json({success: true,timeTable});
-      }
-      else
-      {
-        res.json({success: true,facultyList: doc.data().facultyList});
-      }
+          data.push({
+            code,
+            description: cells[1].innerText.trim(),
+            section: cells[2].innerText.trim(),
+            faculty: cells[3].innerText.trim(),
+            venue: cells[4].innerText.trim(),
+          });
+        }
+      return data.length ? data : null;
+    });
+    
+    await docRef.set({
+        facultyList : timeTable,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({success: true,timeTable});
+      
   }
   catch(error)
   {
@@ -1622,7 +1501,7 @@ app.post('/facultyList', async  (req,res) => {
 // - Handles errors and ensures Puppeteer page is closed.
 
 app.post('/currentSemCredits',async (req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -1632,40 +1511,33 @@ app.post('/currentSemCredits',async (req,res) => {
     {
         //Storing the credits in firestore
         const docRef = db.collection("studentDetails").doc(regNo);
-        const doc = await docRef.get();
-
-        if (!doc.exists || refresh || !doc.data().credits)
-        {
-            await page.goto("https://webstream.sastra.edu/sastrapwi/academy/StudentCourseRegistrationView.jsp");
-            const credits = await page.evaluate(() => {
-              const table = document.querySelector("table");
-              if (!table)
-                return "No records Found";
-              const tbody = table.querySelector("tbody");
-              const rows = Array.from(tbody.getElementsByTagName("tr"));
-              const credit = [];
-              for (let i=4;i<rows.length;i++)
-              {
-                const coloumns = rows[i].getElementsByTagName("td");
-                credit.push({
-                  courseCode : coloumns[0]?.innerText.trim(),
-                  courseName : coloumns[1]?.innerText.trim(),
-                  credit : coloumns[5]?.innerText.trim()
-                });
-              }
-              return credit;
+        
+        await page.goto("https://webstream.sastra.edu/sastrapwi/academy/StudentCourseRegistrationView.jsp");
+        const credits = await page.evaluate(() => {
+          const table = document.querySelector("table");
+          if (!table)
+            return "No records Found";
+          const tbody = table.querySelector("tbody");
+          const rows = Array.from(tbody.getElementsByTagName("tr"));
+          const credit = [];
+          for (let i=4;i<rows.length;i++)
+          {
+            const coloumns = rows[i].getElementsByTagName("td");
+            credit.push({
+              courseCode : coloumns[0]?.innerText.trim(),
+              courseName : coloumns[1]?.innerText.trim(),
+              credit : coloumns[5]?.innerText.trim()
             });
+          }
+          return credit;
+        });
 
-            docRef.set({
-              credits : credits,
-              lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-            },{merge:true});
-            res.json({ success: true,credits})
-        }
-        else
-        {
-            res.json({ success: true,credits: doc.data().credits});
-        }
+        docRef.set({
+          credits : credits,
+          lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        },{merge:true});
+        res.json({ success: true,credits});
+        
     }
     catch(error)
     {
@@ -1692,7 +1564,7 @@ app.post('/currentSemCredits',async (req,res) => {
 // - Ensures Puppeteer page is closed and handles errors properly.
 
 app.post('/timetable', async  (req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -1702,51 +1574,44 @@ app.post('/timetable', async  (req,res) => {
     {
       //Storing timetable in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
-
-      if (!doc.exists || refresh || !doc.data().timetable)
-      { 
-          await page.goto("https://webstream.sastra.edu/sastrapwi/academy/frmStudentTimetable.jsp");
-          const timeTable = await page.evaluate(() => {
-            const tables = document.querySelectorAll("table");
-            const timetableTable = tables[1]; 
-            if (!timetableTable) return null;
-            const rows = timetableTable.querySelectorAll("tbody tr");
-            const data = [];
-            for (let i = 2; i < rows.length; i++) 
-            { 
-              const cells = rows[i].querySelectorAll("td");
-              if (cells.length < 12) continue;
-              data.push({
-                day : cells[0].innerText.trim(),
-                "08:45 - 09:45" : cells[1].innerText.trim() || "N/A",
-                "09:45 - 10:45" : cells[2].innerText.trim() || "N/A",
-                "10:45 - 11:00" : "Break",
-                "11:00 - 12:00" : cells[3].innerText.trim() || "N/A",
-                "12:00 - 01:00" : cells[4].innerText.trim() || "N/A",
-                "01:00 - 02:00" : cells[5].innerText.trim() || "N/A",
-                "02:00 - 03:00" : cells[6].innerText.trim() || "N/A",
-                "03:00 - 03:15" : "Break",
-                "03:15 - 04:15" : cells[7].innerText.trim() || "N/A",
-                "04:15 - 05:15" : cells[8].innerText.trim() || "N/A",
-                "05:30 - 06:30" : cells[9].innerText.trim() || "N/A",
-                "06:30 - 07:30" : cells[10].innerText.trim() || "N/A",
-                "07:30 - 08:30" : cells[11].innerText.trim() || "N/A"
-              });
-            }
-          return data.length ? data : null;
-        });
-        
-        await docRef.set({
-            timetable : timeTable,
-            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-          },{merge:true});
-          res.json({success: true,timeTable});
-      }
-      else
-      {
-        res.json({success: true,timetable: doc.data().timetable});
-      }
+       
+      await page.goto("https://webstream.sastra.edu/sastrapwi/academy/frmStudentTimetable.jsp");
+      const timeTable = await page.evaluate(() => {
+        const tables = document.querySelectorAll("table");
+        const timetableTable = tables[1]; 
+        if (!timetableTable) return null;
+        const rows = timetableTable.querySelectorAll("tbody tr");
+        const data = [];
+        for (let i = 2; i < rows.length; i++) 
+        { 
+          const cells = rows[i].querySelectorAll("td");
+          if (cells.length < 12) continue;
+          data.push({
+            day : cells[0].innerText.trim(),
+            "08:45 - 09:45" : cells[1].innerText.trim() || "N/A",
+            "09:45 - 10:45" : cells[2].innerText.trim() || "N/A",
+            "10:45 - 11:00" : "Break",
+            "11:00 - 12:00" : cells[3].innerText.trim() || "N/A",
+            "12:00 - 01:00" : cells[4].innerText.trim() || "N/A",
+            "01:00 - 02:00" : cells[5].innerText.trim() || "N/A",
+            "02:00 - 03:00" : cells[6].innerText.trim() || "N/A",
+            "03:00 - 03:15" : "Break",
+            "03:15 - 04:15" : cells[7].innerText.trim() || "N/A",
+            "04:15 - 05:15" : cells[8].innerText.trim() || "N/A",
+            "05:30 - 06:30" : cells[9].innerText.trim() || "N/A",
+            "06:30 - 07:30" : cells[10].innerText.trim() || "N/A",
+            "07:30 - 08:30" : cells[11].innerText.trim() || "N/A"
+          });
+        }
+      return data.length ? data : null;
+    });
+    
+    await docRef.set({
+        timetable : timeTable,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({success: true,timeTable});
+      
   }
   catch(error)
   {
@@ -1772,7 +1637,7 @@ app.post('/timetable', async  (req,res) => {
 // - Returns cached courseMap if available.
 
 app.post('/courseMap', async  (req,res) => {
-    let { token,refresh } = req.body;
+    let { token } = req.body;
     const session = await getSessionsByToken(token);
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
@@ -1782,42 +1647,35 @@ app.post('/courseMap', async  (req,res) => {
     {
       //Storing timetable in Firestore
       const docRef = db.collection("studentDetails").doc(regNo);
-      const doc = await docRef.get();
-
-      if (!doc.exists || refresh || !doc.data().courseMap)
-      { 
-          await page.goto("https://webstream.sastra.edu/sastrapwi/academy/frmStudentTimetable.jsp");
-          const courseMap = await page.evaluate(() => {
-            const tables = document.querySelectorAll("table");
-            const timetableTable = tables[2]; 
-            if (!timetableTable) return null;
-            const tbody = timetableTable.querySelector("tbody");
-            const rows = Array.from(tbody.getElementsByTagName("tr"));
-            const courseMap = [];
-            for (let i=1;i<rows.length;i++)
-            {
-              const columns = rows[i].getElementsByTagName("td");
-              courseMap.push({
-                courseCode : columns[0]?.innerText?.trim(),
-                courseName : columns[1]?.innerText?.trim(),
-                section : columns[2]?.innerText?.trim(),
-                faculty : columns[3]?.innerText?.trim(),
-                venue : columns[4]?.innerText?.trim()
-              });
-            }
-            return courseMap;
-        });
-        
-        await docRef.set({
-            courseMap : courseMap,
-            lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-          },{merge:true});
-          res.json({success: true,courseMap});
-      }
-      else
-      {
-        res.json({success: true,courseMap: doc.data().courseMap});
-      }
+      
+      await page.goto("https://webstream.sastra.edu/sastrapwi/academy/frmStudentTimetable.jsp");
+      const courseMap = await page.evaluate(() => {
+        const tables = document.querySelectorAll("table");
+        const timetableTable = tables[2]; 
+        if (!timetableTable) return null;
+        const tbody = timetableTable.querySelector("tbody");
+        const rows = Array.from(tbody.getElementsByTagName("tr"));
+        const courseMap = [];
+        for (let i=1;i<rows.length;i++)
+        {
+          const columns = rows[i].getElementsByTagName("td");
+          courseMap.push({
+            courseCode : columns[0]?.innerText?.trim(),
+            courseName : columns[1]?.innerText?.trim(),
+            section : columns[2]?.innerText?.trim(),
+            faculty : columns[3]?.innerText?.trim(),
+            venue : columns[4]?.innerText?.trim()
+          });
+        }
+        return courseMap;
+    });
+    
+    await docRef.set({
+        courseMap : courseMap,
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
+      res.json({success: true,courseMap});
+      
   }
   catch(error)
   {
@@ -2032,9 +1890,11 @@ const subjectAliasMap = {
 
   "database management system": "dbms",
   "database": "dbms",
+  "fdbms": "dbms",
   "dbms": "dbms",
 
   "design and analysis of algorithm": "daa",
+  "design & analysis of algorithm": "daa",
   "algorithms": "daa",
   "daa": "daa",
 
@@ -2062,9 +1922,11 @@ const subjectAliasMap = {
   "toc": "toc",
 
   "artificial intelligence and data science": "aids",
+  "artificial intelligence & data science": "aids",
   "aids": "aids",
 
   "data warehouse and data mining": "dwdm",
+  "data warehouse & data mining": "dwdm",
   "dwdm": "dwdm",
 
   "explainable ai": "eai",
@@ -2085,6 +1947,7 @@ const subjectAliasMap = {
   "dle": "dle",
 
   "cryptography and network security": "cns",
+  "cryptography & network security": "cns",
   "cns": "cns",
 
   "compiler engineering": "compeng",
@@ -2117,8 +1980,8 @@ const subjectAliasMap = {
   "optimization techniques": "ot",
   "ot": "ot",
 
-  "parallel and distributive system": "pds",
-  "parallel & distributive system": "pds",
+  "parallel and distributed system": "pds",
+  "parallel & distributed system": "pds",
   "pds": "pds",
 
   "sensors and actuators": "sensors",
@@ -2139,6 +2002,7 @@ const subjectAliasMap = {
   "dcn": "dcn",
 
   "signals and systems": "ss",
+  "signals & systems": "ss",
   "ss": "ss"
 };
 
@@ -2706,6 +2570,242 @@ const menuData = [
         dinner: ["Idiayappam (2 Nos)","Mix Veg Gravy","Chappathi","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
       },
     ];
+
+
+  const menuDataGirls = [
+      //Week 2
+      {
+        week : "2",
+        day : "Monday",
+        breakfast : ["Pongal","Tiffin Sambar","Coconut Chutney","Medhu Vada (1 No)","Corn Flakes & Hot Milk"],
+        lunch : ["Chappathi","Dhall Tadka","White Rice","Raddish Sambar","Cabbage Peas Poriyal","Potato Kara Curry","Tomato Rasam","Curd","Fryums","Pickle"],
+        snacks: ["Tea, Milk and Coffee","Peanut Sundal"],
+        dinner: ["Chappathi","Mix Veg Gravy","Tamarind Rice","Thuvaiyal","White Rice","Rasam","Butter Milk","Fryums","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "2",
+        day : "Tuesday",
+        breakfast : ["Idli","Carrot Beans Sambar","Peanut Chutney","Vada(1 No)","Podi & Oil"],
+        lunch : ["Chappathi","White Kuruma","White Rice","Karakuzhambu","Raw Banana Poriyal","Spinach Kootu","Dhall Rasam","Curd","Appalam","Gongura Pickle"],
+        snacks: ["Tea, Milk and Coffee","Cutlet"],
+        dinner: ["Idly","Sambar","Coconut Chutney","Malli Rice","Curd Rice","Fryums","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "2",
+        day : "Wednesday",
+        breakfast : ["Idiyappam (3 Nos)","Veg Kuruma","Ragi Koozhu","Curd Chilly","BBJ"],
+        lunch : ["Chappathi","Palak Paneer","White Rice & Coconut Rice","Bhindi Morekuzhambu","Yam Channa Poriyal","Pepper Rasam","Curd","Fryums","Pickle","Whole Fruit","Paruppu Podi with Oil"],
+        snacks: ["Tea, Milk and Coffee","Masala Pori"],
+        dinner: ["Butter Chappathi","Veg Kuruma","Sambar Rice","Potato Poriyal","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
+      },
+      {
+        week : "2",
+        day : "Thursday",
+        breakfast : ["Mix Veg Uthappam","Small Onion Sambar","Kara Chutney","Multi Grain Koozhu"],
+        lunch : ["Chappathi","Rajma Masala","White Rice","Mix Veg Sambar","Aloo 65","Snackgourd Kootu","Mysore Rasam","Curd","Fryums","Gongura"],
+        snacks: ["Tea, Milk and Coffee","White Channa Sundal"],
+        dinner: ["Veg Biriyani","Raitha","Potato Chips","White Rice","Rasam","Butter Milk","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "2",
+        day : "Friday",
+        breakfast : ["Rava Upma / Kichadi","Sambar","Coconut Chutney","Vada (1 No)","Sandwich Bread with onion, cucumber, tomato and green chutney"],
+        lunch : ["Chappathi","Veg Salna","White Rice","Onion Sambar","Beetroot Channa Poriyal","Chow Chow Kootu","Lemon Rasam","Curd","Appalam","Pickle","Mini Jangiri","Paruppu Podi with Oil"],
+        snacks: ["Tea, Milk and Coffee","Millets"],
+        dinner: ["Onion Uthappam","Sambar","Malli Chutney","Lemon Rice","Thuvaiyal","Curd Rice","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "2",
+        day : "Saturday",
+        breakfast : ["Ragi Dosa","Drumstick Sambar","Mint Chutney","Cooked Oats"],
+        lunch : ["Chappathi","Green Peas Masala","White Rice","Sundavathal Kuzhambu","Beans Usili","Aviyal","Garlic Rasam","Curd","Fryums","Gongura Pickle"],
+        snacks: ["Tea, Milk and Coffee","Bhajji (2)"],
+        dinner: ["Idiyappam (2 Nos)","Veg Kuruma","White Rice","Rasam","Butter Milk","Fryums","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "2",
+        day : "Sunday",
+        breakfast : ["Poori","Aloo Masala","BBJ"],
+        lunch : ["Veg Fried Rice","Manjurian","White Rice","Dhall","Ghee","Aloo Kara Curry","Tomato Rasam","Buttermilk","Appalam","Pickle","Payasam / Lemon Juice"],
+        snacks: ["Tea, Milk and Coffee","Cream Bun/Samosa"],
+        dinner: ["Idli","Sambar","Coconut Chutney","Tomato Rice","Raitha","Curd Rice","Pickle","Banana (1 No)"] 
+      },
+
+      //Week 1
+      {
+        week : "1",
+        day : "Monday",
+        breakfast : ["Vegetable Rava Kichadi","Sambar","Coconut Chutney","Medhu Vada (1 No)","BBJ"],
+        lunch : ["Chappathi","Black Channa Masala","White Rice","Onion Drumstick Sambar","Mix Veg Poriyal","Karamani Poriyal","Tomato Rasam","Curd","Fryums","Pickle"],
+        snacks: ["Tea, Milk and Coffee","Veg Puff"],
+        dinner: ["Chappathi","Aloo Mutter Masala","Mint Rice","White Rice","Rasam","Butter Milk","Fryums","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "1",
+        day : "Tuesday",
+        breakfast : ["Podi Uthappam","Sambar","Kara Chutney","Cooked Oats"],
+        lunch : ["Chappathi","Dhall Fry","White Rice","Bindi Karakuzhambu","Raw Banana Poriyal","Spinach Kootu","Malli Rasam","Curd","Appalam","Paruppu Podi & Oil","Pickle"],
+        snacks: ["Tea, Milk and Coffee","Peanut Sundal"],
+        dinner: ["Idli","Sambar","Cocunut Chutney","Chappathi","Mix Veg Gravy","Curd Rice","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "1",
+        day : "Wednesday",
+        breakfast : ["Idiyappam (3 Nos)","Veg Kuruma","Ragi Koozhu","Curd Chilly","Masala Vada"],
+        lunch : ["Chappathi","White Channa Masala","White Rice","Arachu Vitta Sambar","Aloo Bhindi Poriyal","Carrot Poriyal","Mysore Rasam","Curd","Fryums","Gongura","Whole Fruit"],
+        snacks: ["Tea, Milk and Coffee","Spinach Vada"],
+        dinner: ["Butter Chappathi","Kadai Veg Gravy","Tamarind Rice","Thuvaiyal","Curd Rice","Fryums","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "1",
+        day : "Thursday",
+        breakfast : ["Carrot Malli Uthappam","Sambar","Coconut Chutney","Sprouts"],
+        lunch : ["Chappathi","Aloo Capsicum Masala","White Rice","Pumpkin Morekuzhambu","Yam 65","Chow Chow Kootu","Garlic Rasam","Curd","Appalam","Pickle","Paruppu Podi & Oil"],
+        snacks: ["Tea, Milk and Coffee","Butter Biscuits"],
+        dinner: ["Chappathi","Black Channa Masala","Karakuzhambu Rice","Potato Peas Pal Kootu","White Rice","Rasam","Butter Milk","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "1",
+        day : "Friday",
+        breakfast : ["Pongal","Kosthu","Coconut Chutney","Medhu Vada(1)","Corn Flakes & Hot Milk"],
+        lunch : ["Chappathi","Paneer Butter Masala","White Rice","Spinach Sambar","Beetroot Channa Poriyal","Aviyal","Pineapple Rasam","Curd","Fryums","Gongura","Rava Kesari"],
+        snacks: ["Tea, Milk and Coffee","Mixture / Karasev"],
+        dinner: ["Kal Dosa","Sambar","Kara Chutney","Tomato / Coconut Rice","Raitha / Fryums","Curd Rice","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "1",
+        day : "Saturday",
+        breakfast : ["Vermicelli Upma","Sambar","Kara Chutney","Dall Vada(1)","BBJ"],
+        lunch : ["Chappathi","Green Peas Masala","White Rice","Vatha Kuzhambu","Pumpkin Kootu","Beans Usili","Dhall Rasam","Curd","Appalam","Pickle","Paruppu Podi with Oil"],
+        snacks: ["Tea, Milk and Coffee","Black Channa Sundal"],
+        dinner: ["Upma","Cocunut Chutney","Lemon Rice","Ehite Rice","Rasam","Butter Milk","Potato Poriyal","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "1",
+        day : "Sunday",
+        breakfast : ["Idli","Vadacurry","Tomato Chutney","Podi & Oil"],
+        lunch : ["Aloo Paratha","Hyderabad Veg Biriyani","Boondhi Raitha","White Rice","Dhall with Ghee","Rasam","Curd","Appalam","Pickle","Icecream","Poosani Kootu"],
+        snacks: ["Tea, Milk and Coffee","Tea Cake / Bhel Puri"],
+        dinner: ["Idiayappam (2 Nos)","Mix Veg Gravy","Chappathi","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
+      },
+
+      //Week 4
+      {
+        week : "2",
+        day : "Monday",
+        breakfast : ["Pongal","Tiffin Sambar","Coconut Chutney","Medhu Vada (1 No)","Corn Flakes & Hot Milk"],
+        lunch : ["Chappathi","Dhall Tadka","White Rice","Raddish Sambar","Cabbage Peas Poriyal","Potato Kara Curry","Tomato Rasam","Curd","Fryums","Pickle"],
+        snacks: ["Tea, Milk and Coffee","Peanut Sundal"],
+        dinner: ["Chappathi","Mix Veg Gravy","Tamarind Rice","Thuvaiyal","White Rice","Rasam","Butter Milk","Fryums","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "2",
+        day : "Tuesday",
+        breakfast : ["Idli","Carrot Beans Sambar","Peanut Chutney","Vada(1 No)","Podi & Oil"],
+        lunch : ["Chappathi","White Kuruma","White Rice","Karakuzhambu","Raw Banana Poriyal","Spinach Kootu","Dhall Rasam","Curd","Appalam","Gongura Pickle"],
+        snacks: ["Tea, Milk and Coffee","Cutlet"],
+        dinner: ["Idly","Sambar","Coconut Chutney","Malli Rice","Curd Rice","Fryums","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "2",
+        day : "Wednesday",
+        breakfast : ["Idiyappam (3 Nos)","Veg Kuruma","Ragi Koozhu","Curd Chilly","BBJ"],
+        lunch : ["Chappathi","Palak Paneer","White Rice & Coconut Rice","Bhindi Morekuzhambu","Yam Channa Poriyal","Pepper Rasam","Curd","Fryums","Pickle","Whole Fruit","Paruppu Podi with Oil"],
+        snacks: ["Tea, Milk and Coffee","Masala Pori"],
+        dinner: ["Butter Chappathi","Veg Kuruma","Sambar Rice","Potato Poriyal","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
+      },
+      {
+        week : "2",
+        day : "Thursday",
+        breakfast : ["Mix Veg Uthappam","Small Onion Sambar","Kara Chutney","Multi Grain Koozhu"],
+        lunch : ["Chappathi","Rajma Masala","White Rice","Mix Veg Sambar","Aloo 65","Snackgourd Kootu","Mysore Rasam","Curd","Fryums","Gongura"],
+        snacks: ["Tea, Milk and Coffee","White Channa Sundal"],
+        dinner: ["Veg Biriyani","Raitha","Potato Chips","White Rice","Rasam","Butter Milk","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "2",
+        day : "Friday",
+        breakfast : ["Rava Upma / Kichadi","Sambar","Coconut Chutney","Vada (1 No)","Sandwich Bread with onion, cucumber, tomato and green chutney"],
+        lunch : ["Chappathi","Veg Salna","White Rice","Onion Sambar","Beetroot Channa Poriyal","Chow Chow Kootu","Lemon Rasam","Curd","Appalam","Pickle","Mini Jangiri","Paruppu Podi with Oil"],
+        snacks: ["Tea, Milk and Coffee","Millets"],
+        dinner: ["Onion Uthappam","Sambar","Malli Chutney","Lemon Rice","Thuvaiyal","Curd Rice","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "2",
+        day : "Saturday",
+        breakfast : ["Ragi Dosa","Drumstick Sambar","Mint Chutney","Cooked Oats"],
+        lunch : ["Chappathi","Green Peas Masala","White Rice","Sundavathal Kuzhambu","Beans Usili","Aviyal","Garlic Rasam","Curd","Fryums","Gongura Pickle"],
+        snacks: ["Tea, Milk and Coffee","Bhajji (2)"],
+        dinner: ["Idiyappam (2 Nos)","Veg Kuruma","White Rice","Rasam","Butter Milk","Fryums","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "2",
+        day : "Sunday",
+        breakfast : ["Poori","Aloo Masala","BBJ"],
+        lunch : ["Veg Fried Rice","Manjurian","White Rice","Dhall","Ghee","Aloo Kara Curry","Tomato Rasam","Buttermilk","Appalam","Pickle","Payasam / Lemon Juice"],
+        snacks: ["Tea, Milk and Coffee","Cream Bun/Samosa"],
+        dinner: ["Idli","Sambar","Coconut Chutney","Tomato Rice","Raitha","Curd Rice","Pickle","Banana (1 No)"] 
+      },
+
+
+      //Week 3
+      {
+        week : "3",
+        day : "Monday",
+        breakfast : ["Vegetable Rava Kichadi","Sambar","Coconut Chutney","Medhu Vada (1 No)","BBJ"],
+        lunch : ["Chappathi","Black Channa Masala","White Rice","Onion Drumstick Sambar","Mix Veg Poriyal","Karamani Poriyal","Tomato Rasam","Curd","Fryums","Pickle"],
+        snacks: ["Tea, Milk and Coffee","Veg Puff"],
+        dinner: ["Chappathi","Aloo Mutter Masala","Mint Rice","White Rice","Rasam","Butter Milk","Fryums","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "3",
+        day : "Tuesday",
+        breakfast : ["Podi Uthappam","Sambar","Kara Chutney","Cooked Oats"],
+        lunch : ["Chappathi","Dhall Fry","White Rice","Bindi Karakuzhambu","Raw Banana Poriyal","Spinach Kootu","Malli Rasam","Curd","Appalam","Paruppu Podi & Oil","Pickle"],
+        snacks: ["Tea, Milk and Coffee","Peanut Sundal"],
+        dinner: ["Idli","Sambar","Cocunut Chutney","Chappathi","Mix Veg Gravy","Curd Rice","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "3",
+        day : "Wednesday",
+        breakfast : ["Idiyappam (3 Nos)","Veg Kuruma","Ragi Koozhu","Curd Chilly","Masala Vada"],
+        lunch : ["Chappathi","White Channa Masala","White Rice","Arachu Vitta Sambar","Aloo Bhindi Poriyal","Carrot Poriyal","Mysore Rasam","Curd","Fryums","Gongura","Whole Fruit"],
+        snacks: ["Tea, Milk and Coffee","Spinach Vada"],
+        dinner: ["Butter Chappathi","Kadai Veg Gravy","Tamarind Rice","Thuvaiyal","Curd Rice","Fryums","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "3",
+        day : "Thursday",
+        breakfast : ["Carrot Malli Uthappam","Sambar","Coconut Chutney","Sprouts"],
+        lunch : ["Chappathi","Aloo Capsicum Masala","White Rice","Pumpkin Morekuzhambu","Yam 65","Chow Chow Kootu","Garlic Rasam","Curd","Appalam","Pickle","Paruppu Podi & Oil"],
+        snacks: ["Tea, Milk and Coffee","Butter Biscuits"],
+        dinner: ["Chappathi","Black Channa Masala","Karakuzhambu Rice","Potato Peas Pal Kootu","White Rice","Rasam","Butter Milk","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "3",
+        day : "Friday",
+        breakfast : ["Pongal","Kosthu","Coconut Chutney","Medhu Vada(1)","Corn Flakes & Hot Milk"],
+        lunch : ["Chappathi","Paneer Butter Masala","White Rice","Spinach Sambar","Beetroot Channa Poriyal","Aviyal","Pineapple Rasam","Curd","Fryums","Gongura","Rava Kesari"],
+        snacks: ["Tea, Milk and Coffee","Mixture / Karasev"],
+        dinner: ["Kal Dosa","Sambar","Kara Chutney","Tomato / Coconut Rice","Raitha / Fryums","Curd Rice","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "3",
+        day : "Saturday",
+        breakfast : ["Vermicelli Upma","Sambar","Kara Chutney","Dall Vada(1)","BBJ"],
+        lunch : ["Chappathi","Green Peas Masala","White Rice","Vatha Kuzhambu","Pumpkin Kootu","Beans Usili","Dhall Rasam","Curd","Appalam","Pickle","Paruppu Podi with Oil"],
+        snacks: ["Tea, Milk and Coffee","Black Channa Sundal"],
+        dinner: ["Upma","Cocunut Chutney","Lemon Rice","Ehite Rice","Rasam","Butter Milk","Potato Poriyal","Pickle","Banana (1 No)"] 
+      },
+      {
+        week : "3",
+        day : "Sunday",
+        breakfast : ["Idli","Vadacurry","Tomato Chutney","Podi & Oil"],
+        lunch : ["Aloo Paratha","Hyderabad Veg Biriyani","Boondhi Raitha","White Rice","Dhall with Ghee","Rasam","Curd","Appalam","Pickle","Icecream","Poosani Kootu"],
+        snacks: ["Tea, Milk and Coffee","Tea Cake / Bhel Puri"],
+        dinner: ["Idiayappam (2 Nos)","Mix Veg Gravy","Chappathi","Curd Rice","Pickle","Fryums","Banana (1 No)"] 
+      },
+    ];
 app.get('/messMenu', async (req,res) => {
     try
     {
@@ -2716,6 +2816,23 @@ app.get('/messMenu', async (req,res) => {
           lastUpdated : new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
         });
         return res.json(menuData);
+    }
+    catch(error)
+    {
+        res.status(500).json({ success: false, error: "Server error" });
+    }
+});
+
+app.get('/messMenuGirls', async (req,res) => {
+    try
+    {
+        const docRef = db.collection("cache").doc("messMenuGirls");
+        const doc = await docRef.get();
+        await docRef.set({
+          menu : menuDataGirls,
+          lastUpdated : new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        });
+        return res.json(menuDataGirls);
     }
     catch(error)
     {
