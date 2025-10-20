@@ -620,7 +620,7 @@ app.post('/attendance',async (req,res) => {
         const attendance = [];
         const columns = rows[rows.length-2].getElementsByTagName("td"); 
         attendance.push({
-            percentage: columns[4]?.innerText?.trim()
+            attendance: columns[4]?.innerText?.trim()
         });
         return attendance;
       });
