@@ -1724,15 +1724,10 @@ app.post('/bunk', async (req, res) => {
     if (!session) 
       return res.status(401).json({ success: false, message: "User not logged in" });
     const { regNo, context } = session;
-    const page = await context.newPage();
 
   try {
     const docRef = db.collection("studentDetails").doc(regNo);
     const doc = await docRef.get();
-
-    if (!doc.exists || !doc.data().timetable) {
-      return res.status(500).json({ success: false, message: "Failed to fetch bunk" });
-    }
 
     const data = doc.data();
     const timetable = data.timetable;
@@ -1773,6 +1768,16 @@ app.post('/bunk', async (req, res) => {
     Object.keys(perSem).forEach(course => {
       perSem20[course] = Math.floor(perSem[course] * 0.20); // floor/round as needed
     });
+
+    await docRef.set({
+        bunk :  {
+        perDay,
+        totalWeekly: total,
+        perSem,
+        perSem20
+      },
+        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+      },{merge:true});
 
     
     res.json({

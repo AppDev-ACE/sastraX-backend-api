@@ -28,5 +28,6 @@ API Endpoints:
  - /courseMap: To fetch course name for corresponding course code (POST)
  - /timetable: To fetch timetable (POST)
  - /messMenu: To fetch mess menu (GET)
+ - /messMenuGirls: To fetch mess menu for girls (GET)
 
 API is permanenly hosted in RENDER
