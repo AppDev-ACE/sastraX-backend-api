@@ -128,7 +128,7 @@ app.post('/login', async (req, res) => {
 
     await Promise.all([
       page.click('input[type="button"]'),
-      page.waitForNavigation({ waitUntil: 'networkidle0' })
+      page.waitForNavigation({ waitUntil: 'domcontentloaded' })
     ]);
 
     const loginFailed = await page.$('.ui-state-error');
@@ -449,15 +449,14 @@ app.post('/leaveHistory',async(req,res) => {
 
     await page.goto("https://webstream.sastra.edu/sastrapwi/academy/HostelStudentLeaveApplication.jsp");
     const leaveHistory = await page.evaluate(() => { 
-      const table = document.querySelectorAll("table");
+      const table = document.querySelector("#divDetails table");
       if (!table) 
         return "No records found";
-      const tbody = table[1].querySelector("tbody");
-      const rows = Array.from(tbody.getElementsByTagName("tr"));
+      const rows = Array.from(table.querySelectorAll("tbody tr[onclick]"));
       const leaveHistory = [];
-      for (let i=2;i<rows.length-2;i++)
+      for (let i=0;i<rows.length;i++)
       {
-        const columns = rows[i].getElementsByTagName("td"); 
+        const columns = rows[i].querySelectorAll("td"); 
         leaveHistory.push({
             sno: columns[0]?.innerText?.trim(),
             leaveType: columns[1]?.innerText?.trim(),
