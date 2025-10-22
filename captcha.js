@@ -664,19 +664,34 @@ app.post('/sastraDue',async (req,res) => {
             return "No records found";
         const tbody = table.querySelector("tbody"); 
         const rows = Array.from(tbody.getElementsByTagName("tr")); 
-        for (const row of rows)
-        {
-          const columns = row.getElementsByTagName("td"); 
-          if (columns[0].innerText === "Total :")
-            return columns[1].innerText;
+        let sastraDue = [];
+        let totalDue = "No total found";
+        for (let i = 2; i < rows.length; i++) {
+        const columns = rows[i].getElementsByTagName("td");
+        const firstCol = columns[0]?.innerText?.trim();
+
+        if (firstCol === "Total :" || firstCol === "Total:") {
+          totalDue = columns[1]?.innerText?.trim() || "No total found";
+        } else {
+          sastraDue.push({
+            sem: columns[1]?.innerText?.trim() || "",
+            feeDetails: columns[2]?.innerText?.trim() || "",
+            dueDate: columns[3]?.innerText?.trim() || "",
+            dueAmount: columns[4]?.innerText?.trim() || "",
+          });
         }
+      }
+
+      return { sastraDue, totalDue };
       });
 
       await docRef.set({
-        sastraDue : totalSastraDue,
-        lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-      },{merge:true});
-      res.json({success: true,totalSastraDue});
+      sastraDue: totalSastraDue.sastraDue,
+      totalDue: totalSastraDue.totalDue,
+      lastUpdated: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+    }, { merge: true });
+
+    res.json({ success: true, ...totalSastraDue });
       
     }
     catch(error)
