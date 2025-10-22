@@ -61,7 +61,8 @@ let browser;
     headless: true,
     args: ['--no-sandbox', 
            '--disable-setuid-sandbox', 
-           '--disable-dev-shm-usage'], 
+           '--disable-dev-shm-usage',
+          '--disable-gpu'], 
   });
   app.listen(3000, () => console.log("Server running on port 3000"));
 })();
